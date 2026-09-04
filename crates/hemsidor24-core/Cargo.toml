@@ -1,0 +1,11 @@
+[package]
+name = "hemsidor24-core"
+description = "Domain types and validation rules for Hemsidor24. No I/O, no web, no database."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror.workspace = true

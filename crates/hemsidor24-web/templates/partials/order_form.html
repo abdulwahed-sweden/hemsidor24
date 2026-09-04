@@ -1,0 +1,81 @@
+    <!-- order -->
+    <section id="bestall" style="background:#EEF2F8;"><div data-m="sec" style="max-width:1180px;margin:0 auto;padding:88px 24px 100px;">
+      <div data-m="order" style="display:grid;gap:48px;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:start;">
+        <div data-m="sticky" style="position:sticky;top:96px;">
+          <h2 style="margin:0 0 18px;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:clamp(30px,4vw,42px);letter-spacing:-.03em;line-height:1.1;">Beställ</h2>
+          <p style="margin:0;font-size:18px;color:#3B4759;max-width:22em;">Tar två minuter. Ni betalar först när ni sett sidan.</p>
+        </div>
+        <form data-m="form" method="post" action="/bestall" novalidate style="background:#fff;border:1px solid rgba(14,26,43,.16);border-radius:24px;padding:40px;box-shadow:0 14px 36px -30px rgba(14,26,43,.25);">
+          <input type="text" name="webbplats" value="{{ form.honeypot }}" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;">
+          <input type="hidden" name="oppnad" value="{{ form.opened_at }}">
+          <fieldset style="border:0;margin:0 0 36px;padding:0;">
+            <legend style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px;padding:0;margin-bottom:14px;">Vilken stil vill ni ha?</legend>
+            <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));">
+              
+                {% for c in form.styles %}
+                <label style="position:relative;display:block;border:1.5px solid {{ c.border }};background:{{ c.bg }};border-radius:14px;padding:14px 16px 14px 44px;cursor:pointer;transition:all .18s;" style-hover="border-color:#1C4F9C;">
+                  <input type="radio" name="stil" value="{{ c.value }}"{% if c.checked %} checked{% endif %} style="position:absolute;left:16px;top:19px;accent-color:#1C4F9C;width:16px;height:16px;margin:0;">
+                  <span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px;">{{ c.name }}</span>
+                  <span style="display:block;font-size:16.5px;color:#4A5568;margin-top:2px;">{{ c.desc }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% if let Some(e) = form.style_error %}<p style="margin:8px 0 0;font-family:'Space Grotesk',sans-serif;font-size:16.5px;color:#E4762A;">{{ e }}</p>{% endif %}
+          </fieldset>
+
+          <fieldset style="border:0;margin:0 0 36px;padding:0;">
+            <legend style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px;padding:0;margin-bottom:14px;">Vilket paket?</legend>
+            <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+              
+                {% for c in form.packages %}
+                <label style="position:relative;display:block;border:1.5px solid {{ c.border }};background:{{ c.bg }};border-radius:14px;padding:14px 16px 14px 44px;cursor:pointer;transition:all .18s;" style-hover="border-color:#1C4F9C;">
+                  <input type="radio" name="paket" value="{{ c.value }}"{% if c.checked %} checked{% endif %} style="position:absolute;left:16px;top:19px;accent-color:#1C4F9C;width:16px;height:16px;margin:0;">
+                  <span style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px;">{{ c.name }}</span>
+                  <span style="display:block;font-size:16.5px;color:#4A5568;margin-top:2px;">{{ c.desc }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% if let Some(e) = form.package_error %}<p style="margin:8px 0 0;font-family:'Space Grotesk',sans-serif;font-size:16.5px;color:#E4762A;">{{ e }}</p>{% endif %}
+          </fieldset>
+
+          <fieldset style="border:0;margin:0;padding:0;">
+            <legend style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18px;padding:0;margin-bottom:14px;">Om företaget</legend>
+            <div style="display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));">
+              <div>
+                <label for="foretag" style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:16px;margin-bottom:6px;color:#243247;">Företagsnamn</label>
+                <input id="foretag" name="foretag" type="text" autocomplete="organization" required value="{{ form.company.value }}" style="width:100%;box-sizing:border-box;font-size:18px;padding:12px 14px;border:1.5px solid #C3CBD8;border-radius:10px;background:#F8FAFC;color:#0E1A2B;">
+                {% if let Some(e) = form.company.error %}<p style="margin:8px 0 0;font-family:'Space Grotesk',sans-serif;font-size:16.5px;color:#E4762A;">{{ e }}</p>{% endif %}
+              </div>
+              <div>
+                <label for="ort" style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:16px;margin-bottom:6px;color:#243247;">Ort</label>
+                <input id="ort" name="ort" type="text" autocomplete="address-level2" required value="{{ form.city.value }}" style="width:100%;box-sizing:border-box;font-size:18px;padding:12px 14px;border:1.5px solid #C3CBD8;border-radius:10px;background:#F8FAFC;color:#0E1A2B;">
+                {% if let Some(e) = form.city.error %}<p style="margin:8px 0 0;font-family:'Space Grotesk',sans-serif;font-size:16.5px;color:#E4762A;">{{ e }}</p>{% endif %}
+              </div>
+              <div>
+                <label for="tel" style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:16px;margin-bottom:6px;color:#243247;">Telefon</label>
+                <input id="tel" name="tel" type="tel" autocomplete="tel" required value="{{ form.phone.value }}" style="width:100%;box-sizing:border-box;font-size:18px;padding:12px 14px;border:1.5px solid #C3CBD8;border-radius:10px;background:#F8FAFC;color:#0E1A2B;">
+                {% if let Some(e) = form.phone.error %}<p style="margin:8px 0 0;font-family:'Space Grotesk',sans-serif;font-size:16.5px;color:#E4762A;">{{ e }}</p>{% endif %}
+              </div>
+              <div>
+                <label for="epost" style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:16px;margin-bottom:6px;color:#243247;">E-post</label>
+                <input id="epost" name="epost" type="email" autocomplete="email" required value="{{ form.email.value }}" style="width:100%;box-sizing:border-box;font-size:18px;padding:12px 14px;border:1.5px solid #C3CBD8;border-radius:10px;background:#F8FAFC;color:#0E1A2B;">
+                {% if let Some(e) = form.email.error %}<p style="margin:8px 0 0;font-family:'Space Grotesk',sans-serif;font-size:16.5px;color:#E4762A;">{{ e }}</p>{% endif %}
+              </div>
+              <div style="grid-column:1/-1;">
+                <label for="tjanster" style="display:block;font-family:'Space Grotesk',sans-serif;font-weight:500;font-size:16px;margin-bottom:6px;color:#243247;">Vad gör ni? Skriv era tjänster och priser, en per rad</label>
+                <textarea id="tjanster" name="tjanster" required style="width:100%;box-sizing:border-box;font-size:18px;padding:12px 14px;border:1.5px solid #C3CBD8;border-radius:10px;background:#F8FAFC;color:#0E1A2B;min-height:110px;resize:vertical;">{{ form.services.value }}</textarea>
+                {% if let Some(e) = form.services.error %}<p style="margin:8px 0 0;font-family:'Space Grotesk',sans-serif;font-size:16.5px;color:#E4762A;">{{ e }}</p>{% endif %}
+              </div>
+            </div>
+          </fieldset>
+
+          <div data-m="actions" style="margin-top:32px;display:flex;align-items:center;gap:22px;flex-wrap:wrap;">
+            <button data-m="btn" type="submit" style="border:0;cursor:pointer;display:inline-flex;align-items:center;gap:12px;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:18.5px;color:#fff;background:linear-gradient(180deg,#2560B5,#1C4F9C);padding:13px 24px;border-radius:11px;box-shadow:0 1px 0 rgba(255,255,255,.25) inset,0 8px 18px -10px rgba(28,79,156,.45);transition:all .22s;opacity:1;" style-hover="transform:translateY(-2px);box-shadow:0 1px 0 rgba(255,255,255,.25) inset,0 12px 24px -10px rgba(28,79,156,.5);">Skicka beställning<span style="display:inline-flex;width:26px;height:26px;border-radius:50%;background:#E4762A;align-items:center;justify-content:center;font-size:17px;line-height:1;">→</span></button>
+            <p style="font-size:17px;color:#4A5568;margin:0;max-width:24em;">Logga och bilder skickar ni på mejl efteråt. Har ni inga bilder ordnar vi det.</p>
+          </div>
+
+          
+            {% if sent %}<p role="status" style="margin:26px 0 0;padding:18px 22px;background:#EDF2FA;border:1px solid rgba(28,79,156,.38);border-left:4px solid #E4762A;border-radius:12px;font-size:18.5px;color:#0E1A2B;">Tack. Vi hör av oss med ett förslag inom ett dygn. Ni betalar först när ni sett sidan.</p>{% endif %}
+        </form>
+      </div>
+    </div></section>

@@ -1,0 +1,34 @@
+[package]
+name = "hemsidor24-handover"
+description = "Sijill handover claims. Feature-gated, off by default."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Everything here is optional and off unless `handover` is on. The Sijill crates
+# are pinned by revision, not tag: a tag is a name its owner can move, and a
+# handover receipt is exactly the kind of artefact that has to rebuild to the
+# same bytes years later, or be shown to have done so. b1245ce is the commit
+# behind the v0.3.0 baseline.
+[dependencies]
+hemsidor24-core = { workspace = true, optional = true }
+sijill-cell = { git = "https://github.com/abdulwahed-sweden/sijill-protocol.git", rev = "b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09", optional = true }
+sijill-core = { git = "https://github.com/abdulwahed-sweden/sijill-protocol.git", rev = "b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09", optional = true }
+sijill-dialect = { git = "https://github.com/abdulwahed-sweden/sijill-protocol.git", rev = "b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09", optional = true }
+thiserror = { workspace = true, optional = true }
+
+[features]
+default = []
+handover = [
+    "dep:hemsidor24-core",
+    "dep:sijill-cell",
+    "dep:sijill-core",
+    "dep:sijill-dialect",
+    "dep:thiserror",
+]
+
+[[example]]
+name = "receipt"
+required-features = ["handover"]

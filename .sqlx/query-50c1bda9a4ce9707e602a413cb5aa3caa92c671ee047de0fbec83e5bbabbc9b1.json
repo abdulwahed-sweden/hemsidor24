@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO orders (company, city, phone, email, services, style, package,\n                            ip_hash, user_agent)\n        VALUES ($1, $2, $3, $4, $5, $6, $7,\n                CASE WHEN $8::text IS NULL THEN NULL\n                     ELSE encode(sha256(($8::text || $9::text)::bytea), 'hex') END,\n                $10)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "50c1bda9a4ce9707e602a413cb5aa3caa92c671ee047de0fbec83e5bbabbc9b1"
+}

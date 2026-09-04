@@ -1,0 +1,28 @@
+[package]
+name = "hemsidor24-admin"
+description = "Back office over Postgres. Not reachable by customers."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+hemsidor24-core.workspace = true
+
+# Consumed as-is. Nothing in this crate patches or forks it.
+#
+# Pinned to an exact upstream revision rather than a tag or a version range.
+# A tag is a name its owner can move, and a range floats; the revision is the
+# reproducibility boundary. This commit is the v0.33.1 release, which carries
+# the NULL-binding fix a Hemsidor24 order depends on: without it, an order with
+# `notified_at IS NULL` cannot have its status changed. See
+# docs/rustio-admin-null-bind.patch for that history.
+rustio-admin = { git = "https://github.com/abdulwahed-sweden/rustio-admin.git", rev = "5eb63a7e12ab279f9f5ccab09e01d7aeb99bc03f" }
+
+# The `log` facade only. rustio-admin logs through it and installs no logger,
+# so without this the panel is silent — including when a request fails.
+log = "0.4"
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+thiserror.workspace = true

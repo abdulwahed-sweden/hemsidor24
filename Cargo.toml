@@ -1,0 +1,21 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/hemsidor24-core",
+    "crates/hemsidor24-web",
+    "crates/hemsidor24-notify",
+    "crates/hemsidor24-admin",
+    "crates/hemsidor24-handover",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+repository = "https://github.com/abdulwahed-sweden/hemsidor24"
+
+[workspace.dependencies]
+hemsidor24-core = { path = "crates/hemsidor24-core" }
+thiserror = "2"
+

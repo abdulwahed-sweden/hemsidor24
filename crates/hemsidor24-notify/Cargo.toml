@@ -1,0 +1,16 @@
+[package]
+name = "hemsidor24-notify"
+description = "Outbound email notification. Trait-based so it can be faked in tests."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+hemsidor24-core.workspace = true
+lettre = { version = "0.11", default-features = false, features = [
+    "builder", "smtp-transport", "tokio1-rustls-tls", "rustls-platform-verifier",
+] }
+thiserror.workspace = true
+tracing = "0.1"
