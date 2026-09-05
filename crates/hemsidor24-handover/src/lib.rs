@@ -1,4 +1,4 @@
-//! Signed ownership handover for Hemsidor24.
+//! Signed handover of control, for Hemsidor24.
 //!
 //! # What is signed, and what is not
 //!
@@ -11,7 +11,7 @@
 //! | You pay only once you have seen it | Postgres, `deliveries.accepted_at` | Acceptance of an offer, not a transfer. |
 //! | One revision is included | Postgres, `sites.revisions_used` | Scope metering under this studio's fixed price. |
 //! | Money back before publication | Postgres, `deliveries.refunded_at` | Commercial settlement. |
-//! | **Domain, hosting and source are yours** | **Signed handoff claims** | **Ownership actually moves, to a party who can later dispute it.** |
+//! | **Domain, hosting and source are yours** | **Signed handoff claims** | **Control actually leaves the studio, toward a party who can later dispute it.** |
 //!
 //! The first four already live in Postgres under the back office's audit
 //! trail, which records who changed what and when. Signing them as well would
@@ -19,21 +19,35 @@
 //! a studio-signed "the customer accepted" is exactly the claim a customer
 //! would contest, and the signature adds nothing against them.
 //!
-//! The fifth is different. Ownership passing is a custody event with a real
-//! counterparty, and the studio's own database is the weakest possible
-//! evidence for it precisely because the studio controls it.
+//! The fifth is different. A studio giving up control of an artefact is a
+//! custody event with a real counterparty, and the studio's own database is the
+//! weakest possible evidence for it precisely because the studio controls it.
+//!
+//! # What a signed claim asserts, and what it does not
+//!
+//! A `Released` claim here says: **the studio asserts it gave up control of
+//! this artefact.** That is the whole of it.
+//!
+//! It is not the customer's acknowledgement — there is no customer cell, so
+//! there is no `Received` — and it is not evidence that legal title or
+//! copyright moved. Whether the customer ends up owning anything is settled by
+//! the contract and by the registrar's, host's or forge's own records, none of
+//! which this crate speaks for. The receipt is worded to keep that line
+//! visible.
 //!
 //! # No dialect of its own
 //!
-//! This crate defines **no claim schema**. Ownership passing from one party to
-//! another is what [`sijill_dialect_handoff`] is for, and a private schema for
-//! it would be one company's word for something the domain already has a word
-//! for. Dialects belong to a domain, not to a company.
+//! This crate defines **no claim schema**. Control of a thing passing from one
+//! party to another is what [`sijill_dialect_handoff`] is for, and a private
+//! schema for it would be one company's word for something the domain already
+//! has a word for. Dialects belong to a domain, not to a company.
 //!
 //! Each promised artefact — domain, hosting account, repository — becomes its
 //! own `Released` claim naming the customer as counterparty, because the three
-//! move separately. A `Discharged` claim closes the studio's accountability
-//! and names the `Released` it answers.
+//! move separately. A `Discharged` claim closes the studio's own record for an
+//! artefact — upstream that means only "the item leaves this chain of
+//! accountability", never a discharge of liability — and names the `Released`
+//! it answers.
 //!
 //! # What a receipt is worth
 //!
@@ -69,14 +83,14 @@ pub mod receipt;
 pub mod studio;
 
 #[cfg(feature = "handover")]
-pub use asset::{Asset, Transfer, customer_ref, order_ref};
+pub use asset::{Artefact, Asset, customer_ref, order_ref};
 #[cfg(feature = "handover")]
 pub use receipt::JournalEntry;
 #[cfg(feature = "handover")]
 pub use studio::{Entry, HandoverError, Studio};
 
 // Re-exported because this crate's signatures name them: a caller cannot hold
-// what `Studio::transfer_ownership` returns without being able to name its type.
+// what `Studio::release_custody` returns without being able to name its type.
 #[cfg(feature = "handover")]
 pub use sijill_cell::{CellError, format_timestamp};
 #[cfg(feature = "handover")]

@@ -1,6 +1,6 @@
 [package]
 name = "hemsidor24-handover"
-description = "Signed ownership handover, over the first-party Sijill handoff dialect."
+description = "Signed handover of control, over the first-party Sijill handoff dialect."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

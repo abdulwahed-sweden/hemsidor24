@@ -10,10 +10,14 @@
 //! good ones, attributable and timestamped, but held and editable by the
 //! studio.
 //!
-//! **Signerat.** Ownership actually passing. Signed into an append-only chain,
-//! tamper-evident, and checkable by someone who does not trust the studio's
-//! database. Only the promise most likely to be disputed as a matter of fact
-//! gets this treatment.
+//! **Signerat.** The studio releasing control of an artefact. Signed into an
+//! append-only chain, tamper-evident, and checkable by someone who does not
+//! trust the studio's database.
+//!
+//! A signed row says what the *studio* did, and stops there. There is no
+//! customer cell and therefore no `Received`, so the receipt must never
+//! render the customer as having taken, accepted or agreed to anything, and
+//! must never present a release of control as a transfer of legal title.
 //!
 //! The reader never meets the words dialect, cell, claim or content address.
 //! They meet a date, a thing, and a note saying how firmly it is established.
@@ -60,7 +64,14 @@ impl JournalEntry {
 /// qualifies.
 const CAVEATS_SV: &[&str] = &[
     "Rader märkta \"signerat\" är undertecknade av Hemsidor24 och kan inte \
-     ändras i efterhand utan att det syns. Det visar inte att innehållet är sant.",
+     ändras i efterhand utan att det syns. De visar att Hemsidor24 uppgett \
+     detta, inte att uppgiften är sann.",
+    "En signerad rad betyder att Hemsidor24 lämnat ifrån sig kontrollen över \
+     artefakten. Den visar inte att kunden tagit emot den, och inte att \
+     äganderätt eller upphovsrätt har övergått.",
+    "Uppgifter hos domänregistrator, webbhotell eller GitHub kan visa vem som \
+     kontrollerar ett konto eller en domän. Vad som gäller rättsligt kan följa \
+     av avtal och avgörs inte av detta dokument.",
     "Rader märkta \"studiojournal\" kommer från Hemsidor24:s egen databas. \
      De är daterade och spårbara, men de är inte undertecknade.",
     "Kunden har inte undertecknat något här. Varje post är Hemsidor24:s egen \
@@ -101,7 +112,7 @@ pub fn render(cell_id: &str, order_id: i64, journal: &[JournalEntry], signed: &[
         out.push('\n');
     }
 
-    out.push_str("ÄGANDERÄTT\n\n");
+    out.push_str("ÖVERLÄMNING\n\n");
     if signed.is_empty() {
         out.push_str("  Inget överlämnande är undertecknat för denna beställning.\n\n");
     }
@@ -110,10 +121,13 @@ pub fn render(cell_id: &str, order_id: i64, journal: &[JournalEntry], signed: &[
             Some(asset) => asset.label_sv(),
             None => "Överlämnat",
         };
+        // Says what the studio did, never what the customer did. `Discharged`
+        // upstream is only "the item leaves this chain of accountability" — a
+        // closing of the studio's own record, not a discharge of liability.
         let verb = if body.event.to_string() == "discharged" {
-            "Ansvar avslutat"
+            "Studion avslutade sin journal"
         } else {
-            "Överförd till kund"
+            "Studion lämnade ifrån sig kontrollen"
         };
         out.push_str(&format!("  {what:<26} {verb}\n"));
         out.push_str(&format!(
@@ -124,7 +138,7 @@ pub fn render(cell_id: &str, order_id: i64, journal: &[JournalEntry], signed: &[
             "       Tid:       {}\n",
             format_timestamp(claim.claim.timestamp_ms)
         ));
-        out.push_str("       Underlag:  signerat\n");
+        out.push_str("       Underlag:  signerat av Hemsidor24\n");
         out.push_str(&format!("       Verifieringskod: {}\n", claim.id));
         if !body.note.is_empty() {
             out.push_str(&format!("       Notering:  {}\n", body.note));
@@ -132,8 +146,9 @@ pub fn render(cell_id: &str, order_id: i64, journal: &[JournalEntry], signed: &[
         out.push('\n');
     }
 
-    out.push_str("LÖFTET SOM DETTA AVSER\n\n");
-    out.push_str("  Domän och webbhotell i ditt namn. All kod på GitHub — du äger den.\n\n");
+    out.push_str("VAD SOM UTLOVADES\n\n");
+    out.push_str("  Domän och webbhotell i ditt namn. All kod på GitHub — du äger den.\n");
+    out.push_str("  Detta är vad som utlovades. Vad detta dokument visar står nedan.\n\n");
 
     out.push_str("VAD DETTA INTE VISAR\n\n");
     for caveat in CAVEATS_SV {

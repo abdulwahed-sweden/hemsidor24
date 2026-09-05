@@ -1,8 +1,8 @@
 //! The studio's cell, speaking the first-party handoff dialect.
 //!
 //! One cell, one key, one chain. This crate defines **no dialect of its own**:
-//! ownership passing from the studio to a customer is a custody event, and
-//! `sijill-dialect-handoff` already says what a custody event is. A private
+//! a studio releasing control of an artefact to a customer is a custody event,
+//! and `sijill-dialect-handoff` already says what a custody event is. A private
 //! schema for it would be this company's word for something the domain already
 //! has a word for.
 //!
@@ -15,7 +15,7 @@ use sijill_dialect::Dialect;
 use sijill_dialect_handoff::{Event, Handoff};
 use thiserror::Error;
 
-use crate::asset::{Asset, Transfer, customer_ref};
+use crate::asset::{Artefact, Asset, customer_ref};
 
 /// Something that went wrong issuing or reading a claim.
 #[derive(Debug, Error)]
@@ -64,32 +64,40 @@ impl Studio {
         &self.cell
     }
 
-    /// Sign that the named artefacts passed to the customer.
+    /// Sign that the studio released control of the named artefacts.
     ///
     /// One `Released` claim per artefact, because they move separately and a
-    /// reader asking "was the domain actually put in their name" should not
-    /// have to unpack a bundle to find out. Each names the customer as
-    /// counterparty, which the dialect requires for `Released`.
+    /// reader asking about the domain alone should not have to unpack a bundle
+    /// to find out. Each names the customer as counterparty, which the dialect
+    /// requires for `Released`.
+    ///
+    /// # What this asserts, exactly
+    ///
+    /// That the studio says it gave up control of this artefact. Nothing more.
+    /// It is not the customer's acknowledgement — there is no customer cell and
+    /// therefore no `Received` — and it is not evidence that legal title or
+    /// copyright moved, which is a matter for the contract and for the
+    /// registrar's, host's or forge's own records.
     ///
     /// This is the only business fact this crate signs. Everything else the
     /// studio does — showing a proposal, recording an acceptance, spending a
     /// revision, issuing a refund — is commercial state that already lives in
     /// Postgres under the back office's audit trail, and is carried into the
     /// receipt from there.
-    pub fn transfer_ownership(
+    pub fn release_custody(
         &self,
         customer_id: i64,
-        transfers: &[Transfer],
+        artefacts: &[Artefact],
     ) -> Result<Vec<SignedClaim>, HandoverError> {
-        if transfers.is_empty() {
+        if artefacts.is_empty() {
             return Err(HandoverError::NothingToTransfer);
         }
 
         let counterparty = customer_ref(customer_id);
-        let mut issued = Vec::with_capacity(transfers.len());
+        let mut issued = Vec::with_capacity(artefacts.len());
 
-        for transfer in transfers {
-            let body = Handoff::new(transfer.item_ref(), Event::Released)?
+        for artefact in artefacts {
+            let body = Handoff::new(artefact.item_ref(), Event::Released)?
                 .with_counterparty(counterparty.clone())?;
             issued.push(self.cell.issue(&body)?);
         }
@@ -97,21 +105,28 @@ impl Studio {
         Ok(issued)
     }
 
-    /// Sign that the studio's custody of an artefact has ended.
+    /// Close the studio's own record for an artefact.
     ///
-    /// `Discharged` is the dialect's answer to a chain that simply stops: it
-    /// says the item left this chain of accountability deliberately, rather
-    /// than the record being withheld. `acknowledges` points at the `Released`
-    /// it closes, so the pair can be checked instead of matched by guesswork.
+    /// `Discharged` upstream means exactly one thing: *custody ended; the item
+    /// leaves this chain of accountability*. It exists because a chain that
+    /// simply stops cannot be told apart from one being withheld, so it is the
+    /// positive assertion that the record ends deliberately.
     ///
-    /// The dialect refuses a counterparty on `Discharged` — it is about the
-    /// item in one party's hands — so none is set.
+    /// It is **not** a discharge of liability, not a contractual discharge, not
+    /// a transfer of title, and not the customer accepting anything. Upstream
+    /// deliberately refuses to model *why* custody ended at all — that is a
+    /// note or an evidence file, never a variant.
+    ///
+    /// `acknowledges` points at the `Released` it closes, so the pair can be
+    /// checked instead of matched by guesswork. The dialect refuses a
+    /// counterparty here — it is about the item in one party's hands — so none
+    /// is set.
     pub fn discharge(
         &self,
-        transfer: &Transfer,
+        artefact: &Artefact,
         released: ClaimId,
     ) -> Result<SignedClaim, HandoverError> {
-        let body = Handoff::new(transfer.item_ref(), Event::Discharged)?.acknowledging(released);
+        let body = Handoff::new(artefact.item_ref(), Event::Discharged)?.acknowledging(released);
         Ok(self.cell.issue(&body)?)
     }
 

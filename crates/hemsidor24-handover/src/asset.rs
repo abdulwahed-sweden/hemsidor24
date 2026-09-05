@@ -1,15 +1,20 @@
-//! The things ownership of which actually passes to the customer.
+//! The artefacts the studio hands control of to the customer.
 //!
-//! The public page makes one promise that later gets disputed as a question of
-//! *fact* rather than of satisfaction: "Domän och hosting i ditt namn. All kod
-//! på GitHub — du äger den." Three artefacts, and each one moves separately —
-//! a domain can be in the customer's name while the repository transfer is
-//! still pending. So each gets its own claim rather than one lumped event,
-//! which also matches the three booleans the `deliveries` table already keeps.
+//! The public page promises three of them: a domain, a hosting account and a
+//! repository. Each moves separately — a domain can already be in the
+//! customer's name while the repository handover is still pending — so each
+//! gets its own claim rather than one lumped event, which also matches the
+//! three booleans the `deliveries` table already keeps.
+//!
+//! What a claim about one of these records is narrow, and the wording here is
+//! kept narrow to match: the studio asserts it **released control** of the
+//! artefact. Whether legal title or copyright moved is a matter for the
+//! contract and for the registrar's, host's or forge's own records, and no
+//! claim in this crate speaks to it.
 
 use sijill_dialect_handoff::MAX_REF_LEN;
 
-/// One of the three things the studio promises to hand over.
+/// One of the three artefacts the studio promises to hand over.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Asset {
     /// The domain, registered in the customer's name.
@@ -44,7 +49,7 @@ impl Asset {
     }
 }
 
-/// What is being handed over, and to whom, as the claim will carry it.
+/// One artefact, as the claim will carry it.
 ///
 /// # Why the item is published and the customer is not
 ///
@@ -66,18 +71,18 @@ impl Asset {
 /// holding the log learns that *a* customer received a domain, which is
 /// already obvious from the domain, and no more.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Transfer {
-    /// Which of the three promises this settles.
+pub struct Artefact {
+    /// Which of the three promises this artefact belongs to.
     pub asset: Asset,
     /// The artefact itself: the domain name, the hosting account reference, or
     /// the repository URL.
     pub identifier: String,
 }
 
-impl Transfer {
-    /// Name an artefact being handed over.
+impl Artefact {
+    /// Name an artefact whose control is being released.
     pub fn new(asset: Asset, identifier: impl Into<String>) -> Self {
-        Transfer {
+        Artefact {
             asset,
             identifier: identifier.into(),
         }
@@ -122,8 +127,8 @@ mod tests {
 
     #[test]
     fn item_references_are_prefixed_and_distinguishable() {
-        let dom = Transfer::new(Asset::Domain, "malmobygg.se");
-        let src = Transfer::new(Asset::SourceCode, "https://github.com/h24/malmobygg");
+        let dom = Artefact::new(Asset::Domain, "malmobygg.se");
+        let src = Artefact::new(Asset::SourceCode, "https://github.com/h24/malmobygg");
         assert_eq!(dom.item_ref(), "dom:malmobygg.se");
         assert!(src.item_ref().starts_with("src:"));
         assert_ne!(dom.item_ref(), src.item_ref());
@@ -140,14 +145,14 @@ mod tests {
 
     #[test]
     fn realistic_references_fit_the_dialect_bound() {
-        assert!(Transfer::new(Asset::Domain, "malmobygg.se").fits());
-        assert!(Transfer::new(Asset::SourceCode, "https://github.com/hemsidor24/malmobygg").fits());
-        assert!(Transfer::new(Asset::Hosting, "loopia:12345").fits());
+        assert!(Artefact::new(Asset::Domain, "malmobygg.se").fits());
+        assert!(Artefact::new(Asset::SourceCode, "https://github.com/hemsidor24/malmobygg").fits());
+        assert!(Artefact::new(Asset::Hosting, "loopia:12345").fits());
     }
 
     #[test]
     fn an_absurd_reference_is_reported_rather_than_signed() {
-        assert!(!Transfer::new(Asset::Domain, "x".repeat(MAX_REF_LEN)).fits());
+        assert!(!Artefact::new(Asset::Domain, "x".repeat(MAX_REF_LEN)).fits());
     }
 
     #[test]

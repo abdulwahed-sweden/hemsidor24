@@ -5,10 +5,10 @@
 //! ```
 //!
 //! The journal lines stand in for rows the back office would read out of
-//! Postgres; the ownership lines are really signed, into a throwaway cell that
+//! Postgres; the handover lines are really signed, into a throwaway cell that
 //! is removed afterwards.
 
-use hemsidor24_handover::{Asset, JournalEntry, Studio, Transfer, receipt};
+use hemsidor24_handover::{Artefact, Asset, JournalEntry, Studio, receipt};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dir = std::env::temp_dir().join(format!("hemsidor24-receipt-{}", std::process::id()));
@@ -18,11 +18,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (order, customer) = (42, 42);
 
     let promised = [
-        Transfer::new(Asset::Domain, "malmobygg.se"),
-        Transfer::new(Asset::Hosting, "loopia:558812"),
-        Transfer::new(Asset::SourceCode, "https://github.com/hemsidor24/malmobygg"),
+        Artefact::new(Asset::Domain, "malmobygg.se"),
+        Artefact::new(Asset::Hosting, "loopia:558812"),
+        Artefact::new(Asset::SourceCode, "https://github.com/hemsidor24/malmobygg"),
     ];
-    studio.transfer_ownership(customer, &promised)?;
+    studio.release_custody(customer, &promised)?;
 
     let journal = vec![
         JournalEntry::new("2026-09-04 09:12", "Förslag visat")
