@@ -176,6 +176,7 @@ mod tests {
     #[tokio::test]
     async fn accepting_an_order_creates_and_links_the_three_rows() {
         let Some(db) = db().await else { return };
+        let _serial = crate::workflow::DB_LOCK.lock().await;
         let order_id = seed_order(&db, "Accept AB", "godkand").await;
 
         let result = accept_orders(&db, &[order_id]).await.expect("action runs");
@@ -231,6 +232,7 @@ mod tests {
     #[tokio::test]
     async fn running_it_twice_does_not_create_a_second_customer() {
         let Some(db) = db().await else { return };
+        let _serial = crate::workflow::DB_LOCK.lock().await;
         let order_id = seed_order(&db, "Twice AB", "godkand").await;
 
         assert_eq!(
@@ -261,6 +263,7 @@ mod tests {
     #[tokio::test]
     async fn a_cancelled_order_is_refused() {
         let Some(db) = db().await else { return };
+        let _serial = crate::workflow::DB_LOCK.lock().await;
         let order_id = seed_order(&db, "Cancelled AB", "avbruten").await;
 
         let result = accept_orders(&db, &[order_id]).await.expect("action runs");
@@ -278,6 +281,7 @@ mod tests {
     #[tokio::test]
     async fn one_bad_order_does_not_stop_the_others() {
         let Some(db) = db().await else { return };
+        let _serial = crate::workflow::DB_LOCK.lock().await;
         let good = seed_order(&db, "Good AB", "ny").await;
         let bad = seed_order(&db, "Bad AB", "avbruten").await;
 

@@ -9,10 +9,12 @@
 //! schema moved (see migrations 0002 and 0003), not the framework.
 
 mod accept;
+mod acceptance;
 mod logging;
 mod mail;
 mod models;
 mod proposal;
+mod workflow;
 
 use std::net::{IpAddr, SocketAddr};
 

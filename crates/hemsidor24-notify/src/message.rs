@@ -157,6 +157,50 @@ pub fn proposal_ready(
     }
 }
 
+/// The message confirming the studio has registered the customer's approval.
+///
+/// Sent when an order moves to "Godkänd". It states plainly what was recorded
+/// and what happens next, and it deliberately invents no commercial terms —
+/// invoicing, payment periods and the rest are settled by the agreement, not
+/// by this envelope.
+pub fn proposal_accepted(
+    company: &str,
+    package: hemsidor24_core::Package,
+    to_customer: &str,
+    from: &str,
+    studio: &str,
+) -> Message {
+    let body = format!(
+        "Hej {company},\n\
+         \n\
+         Tack. Vi har registrerat att du godkänt förslaget.\n\
+         \n\
+         Nu publicerar vi sidan. Domän, webbhotell och källkod ska stå i ditt\n\
+         namn, och vi hör av oss när allt är på plats.\n\
+         \n\
+         Detta gäller din beställning:\n\
+         \n\
+         Paket:    {package} ({price} kr exkl. moms)\n\
+         \n\
+         Svara på det här mejlet om något ser fel ut.\n\
+         \n\
+         Hemsidor24\n\
+         {studio}\n",
+        company = company,
+        package = package.label_sv(),
+        price = package.price_sek_ex_vat(),
+        studio = studio,
+    );
+
+    Message {
+        to: to_customer.to_owned(),
+        from: from.to_owned(),
+        reply_to: Some(studio.to_owned()),
+        subject: "Vi har registrerat ditt godkännande — Hemsidor24".to_owned(),
+        body,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,6 +294,38 @@ mod tests {
         assert!(m.body.contains("Du betalar först när du sett sidan"));
         assert!(m.body.contains("kostar det ingenting"));
         assert!(m.body.contains("2490 kr exkl. moms"));
+    }
+
+    #[test]
+    fn the_acceptance_mail_records_what_was_agreed_without_inventing_terms() {
+        let m = proposal_accepted(
+            "Malmö Bygg AB",
+            hemsidor24_core::Package::Pro,
+            "kontakt@malmobygg.se",
+            "no-reply@example.se",
+            "studio@example.se",
+        );
+        assert_eq!(m.to, "kontakt@malmobygg.se");
+        assert_eq!(
+            m.subject,
+            "Vi har registrerat ditt godkännande — Hemsidor24"
+        );
+        assert!(m.body.contains("godkänt förslaget"));
+        assert!(m.body.contains("Pro (4490 kr exkl. moms)"));
+        // Payment periods, invoice terms and deadlines belong to the
+        // agreement. An envelope must not quietly introduce them.
+        for invented in [
+            "dagar",
+            "faktura",
+            "förfaller",
+            "ränta",
+            "betalningsvillkor",
+        ] {
+            assert!(
+                !m.body.to_lowercase().contains(invented),
+                "invented term: {invented}"
+            );
+        }
     }
 
     #[test]

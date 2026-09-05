@@ -87,6 +87,14 @@ impl ModelAdmin for Order {
                 permission: None,
             },
             BulkAction {
+                name: crate::acceptance::ACTION,
+                label: crate::acceptance::LABEL,
+                // Emails the customer and closes the money-back guarantee.
+                destructive: false,
+                confirm: true,
+                permission: None,
+            },
+            BulkAction {
                 name: crate::accept::ACTION,
                 label: crate::accept::LABEL,
                 // Not destructive — it only creates rows — but it does have an
@@ -109,6 +117,7 @@ impl ModelAdmin for Order {
         Box::pin(async move {
             match action {
                 crate::proposal::ACTION => crate::proposal::send_proposals(db, ids).await,
+                crate::acceptance::ACTION => crate::acceptance::record_acceptances(db, ids).await,
                 crate::accept::ACTION => crate::accept::accept_orders(db, ids).await,
                 _ => Ok(BulkActionResult::default()),
             }
