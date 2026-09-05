@@ -87,6 +87,15 @@ impl ModelAdmin for Order {
                 permission: None,
             },
             BulkAction {
+                name: crate::publication::ACTION,
+                label: crate::publication::LABEL,
+                // Publishes, hands artefacts over and signs claims that cannot
+                // be unsigned. The most consequential button on the page.
+                destructive: false,
+                confirm: true,
+                permission: None,
+            },
+            BulkAction {
                 name: crate::acceptance::ACTION,
                 label: crate::acceptance::LABEL,
                 // Emails the customer and closes the money-back guarantee.
@@ -116,10 +125,22 @@ impl ModelAdmin for Order {
     {
         Box::pin(async move {
             match action {
+                crate::publication::ACTION => crate::publication::publish_sites(db, ids).await,
                 crate::proposal::ACTION => crate::proposal::send_proposals(db, ids).await,
                 crate::acceptance::ACTION => crate::acceptance::record_acceptances(db, ids).await,
                 crate::accept::ACTION => crate::accept::accept_orders(db, ids).await,
-                _ => Ok(BulkActionResult::default()),
+                // An action declared in `bulk_actions` with no arm here returns
+                // "0 of 0" and a redirect: the operator sees a button that does
+                // nothing and no trace anywhere. That happened once during
+                // development and took a while to find, so it is loud now.
+                other => {
+                    log::error!(
+                        "bulk action {other:?} is declared on Order but has no handler; \
+                         {} row(s) were left untouched",
+                        ids.len()
+                    );
+                    Ok(BulkActionResult::default())
+                }
             }
         })
     }
@@ -244,6 +265,9 @@ pub struct Site {
     pub repo_url: Option<String>,
     /// Where it is live, once it is.
     pub live_url: Option<String>,
+    /// The hosting account, as the provider identifies it. Free text: every
+    /// provider names an account differently.
+    pub hosting_ref: Option<String>,
     /// Package slug from [`Package`].
     #[rustio(choices = ["start", "pro"])]
     pub package: String,
@@ -267,7 +291,7 @@ impl ModelAdmin for Site {
     }
 
     fn search_fields() -> &'static [&'static str] {
-        &["repo_url", "live_url", "notes"]
+        &["repo_url", "live_url", "hosting_ref", "notes"]
     }
 
     fn ordering() -> &'static [&'static str] {

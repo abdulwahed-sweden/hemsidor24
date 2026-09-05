@@ -14,6 +14,8 @@ mod logging;
 mod mail;
 mod models;
 mod proposal;
+mod publication;
+mod signing;
 mod workflow;
 
 use std::net::{IpAddr, SocketAddr};
@@ -70,6 +72,7 @@ fn required(var: &'static str) -> Result<String, StartupError> {
 async fn main() -> Result<(), StartupError> {
     logging::init();
     mail::init();
+    signing::init();
 
     let database_url = required("DATABASE_URL")?;
 

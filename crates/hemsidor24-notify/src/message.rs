@@ -201,6 +201,46 @@ pub fn proposal_accepted(
     }
 }
 
+/// The message telling the customer their site is live.
+///
+/// The last thing the studio says in the ordinary course of a job. It names
+/// where the site is and what has been put in the customer's name, and it says
+/// what is theirs to keep — which is the promise the whole product is sold on.
+pub fn site_published(
+    company: &str,
+    live_url: &str,
+    to_customer: &str,
+    from: &str,
+    studio: &str,
+) -> Message {
+    let body = format!(
+        "Hej {company},\n\
+         \n\
+         Din sida är publicerad:\n\
+         \n\
+         {live_url}\n\
+         \n\
+         Domän, webbhotell och källkod står i ditt namn. Du är inte bunden till\n\
+         oss — du kan när som helst låta någon annan arbeta vidare på sidan.\n\
+         \n\
+         Hör av dig om något behöver rättas.\n\
+         \n\
+         Hemsidor24\n\
+         {studio}\n",
+        company = company,
+        live_url = live_url,
+        studio = studio,
+    );
+
+    Message {
+        to: to_customer.to_owned(),
+        from: from.to_owned(),
+        reply_to: Some(studio.to_owned()),
+        subject: "Din sida är publicerad — Hemsidor24".to_owned(),
+        body,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -326,6 +366,21 @@ mod tests {
                 "invented term: {invented}"
             );
         }
+    }
+
+    #[test]
+    fn the_publication_mail_names_the_site_and_what_is_theirs() {
+        let m = site_published(
+            "Malmö Bygg AB",
+            "https://malmobygg.se",
+            "kontakt@malmobygg.se",
+            "no-reply@example.se",
+            "studio@example.se",
+        );
+        assert_eq!(m.subject, "Din sida är publicerad — Hemsidor24");
+        assert!(m.body.contains("https://malmobygg.se"));
+        assert!(m.body.contains("i ditt namn"));
+        assert!(m.body.contains("inte bunden till"));
     }
 
     #[test]

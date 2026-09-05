@@ -40,3 +40,7 @@ handover = [
 [[example]]
 name = "receipt"
 required-features = ["handover"]
+
+[[example]]
+name = "inspect"
+required-features = ["handover"]

@@ -42,7 +42,10 @@ pub async fn send_proposals(db: &Db, ids: &[i64]) -> Result<BulkActionResult> {
     for &id in ids {
         match workflow::advance(db, id, &step).await {
             Ok(()) => succeeded += 1,
-            Err(reason) => failed.push(BulkActionFailure::new(id, reason)),
+            Err(reason) => {
+                log::warn!("{ACTION}: order {id} refused: {reason}");
+                failed.push(BulkActionFailure::new(id, reason));
+            }
         }
     }
 

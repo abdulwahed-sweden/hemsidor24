@@ -84,6 +84,7 @@ async fn accept_one(db: &Db, order_id: i64) -> std::result::Result<(), String> {
             domain_id: None,
             repo_url: None,
             live_url: None,
+            hosting_ref: None,
             package: order.package.clone(),
             revisions_used: 0,
             published_at: None,
@@ -134,7 +135,10 @@ pub async fn accept_orders(db: &Db, ids: &[i64]) -> Result<BulkActionResult> {
     for &id in ids {
         match accept_one(db, id).await {
             Ok(()) => succeeded += 1,
-            Err(reason) => failed.push(BulkActionFailure::new(id, reason)),
+            Err(reason) => {
+                log::warn!("{ACTION}: order {id} refused: {reason}");
+                failed.push(BulkActionFailure::new(id, reason));
+            }
         }
     }
 

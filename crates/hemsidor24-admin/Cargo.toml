@@ -11,6 +11,10 @@ repository.workspace = true
 hemsidor24-core.workspace = true
 hemsidor24-notify = { path = "../hemsidor24-notify" }
 
+# Optional and off by default, so the ordinary back office pulls in no
+# protocol code at all. Enabling it makes publishing sign a handoff claim.
+hemsidor24-handover = { path = "../hemsidor24-handover", optional = true }
+
 # Consumed as-is. Nothing in this crate patches or forks it.
 #
 # Pinned to an exact upstream revision rather than a tag or a version range.
@@ -27,3 +31,8 @@ log = "0.4"
 
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 thiserror.workspace = true
+
+[features]
+default = []
+# Sign a Sijill handoff claim for each artefact when a site is published.
+handover = ["dep:hemsidor24-handover", "hemsidor24-handover/handover"]
