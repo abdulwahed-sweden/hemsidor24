@@ -9,14 +9,15 @@ repository.workspace = true
 
 # Everything here is optional and off unless `handover` is on.
 #
-# Pinned to an exact revision rather than a tag. `sijill-dialect-handoff` — the
-# first-party custody dialect this crate now speaks — landed after the v0.3.0
-# baseline and is not part of that tag, so 17dd4cf is the earliest revision
-# that carries it. A revision pin is what the protocol's own README recommends
-# when a build has to produce the same bytes years later, which is exactly what
-# a handover record has to do. The API this crate uses is unchanged between
-# v0.3.0 and here: sijill-dialect is byte-identical, sijill-core's only edit is
-# a doc comment, and sijill-cell added documentation and no public item.
+# Pinned to an exact revision: 17dd4cf, released upstream as v0.4.0. The
+# revision is what Cargo resolves and what makes the build reproducible, which
+# is what the protocol's own README recommends when a build has to produce the
+# same bytes years later — exactly what a handover record has to do. The tag is
+# the same commit under a human-readable name; it is recorded here so a reader
+# knows which released baseline this is, not because Cargo uses it.
+#
+# `sijill-dialect-handoff` — the first-party custody dialect this crate speaks —
+# is part of that baseline.
 [dependencies]
 hemsidor24-core = { workspace = true, optional = true }
 sijill-cell = { git = "https://github.com/abdulwahed-sweden/sijill-protocol.git", rev = "17dd4cf00baf4e3630840759e00770a7ba03c741", optional = true }

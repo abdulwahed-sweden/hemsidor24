@@ -85,9 +85,10 @@ on GitHub, and a claim saying only "an item was transferred" would be useless
 to the reader it is written for. The customer is not: they appear as `cus-42`,
 the `customers.id`, resolvable only through records the studio holds.
 
-The protocol crates are pinned by exact revision. Note that
-`sijill-dialect-handoff` landed after the `v0.3.0` baseline, so the pin is a
-main-line revision rather than a released tag — see *Known limits*.
+The protocol crates are pinned by exact revision — `17dd4cf`, the commit
+released upstream as `v0.4.0`. The revision is what Cargo resolves and what
+makes the build reproducible; the tag is the human-readable name for the same
+commit.
 
 ### What a receipt is worth
 
@@ -148,16 +149,6 @@ collapses empty to `None`, and stores NULL. The columns were simply declared
 left the panel demanding a value for notes nobody had written. Migration 0004
 makes them nullable and the models use `Option<String>`. No framework change was
 needed.
-
-**The Sijill pin is a main-line revision, not a released tag.**
-`sijill-dialect-handoff` was added after `v0.3.0`, so `17dd4cf` is the earliest
-revision carrying it. Pinning by revision is reproducible — that is what the
-protocol's own README recommends for builds that must produce the same bytes
-years later — but it is not a baseline the protocol has blessed. The API this
-workspace uses is unchanged between `v0.3.0` and that revision: `sijill-dialect`
-is byte-identical, `sijill-core`'s only edit is a doc comment, and `sijill-cell`
-gained documentation and no public item. Moving to a tagged baseline is worth
-doing when the protocol cuts one.
 
 The one shape rustio-admin still cannot express is a `NOT NULL` text column that
 accepts the empty string — Django's `blank=True` without `null=True`. Nothing
