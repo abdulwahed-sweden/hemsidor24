@@ -8,7 +8,10 @@
 //! Nothing in this file reaches into `rustio-admin`. It is consumed exactly as
 //! published: derive, `impl ModelAdmin`, register.
 
-use rustio_admin::{DateTime, ModelAdmin, RustioAdmin, Utc};
+use rustio_admin::{
+    BulkAction, BulkActionContext, BulkActionResult, DateTime, Db, ModelAdmin, Result, RustioAdmin,
+    Utc,
+};
 
 /// An order as it arrived from the public form.
 ///
@@ -68,6 +71,37 @@ impl ModelAdmin for Order {
     /// Newest first.
     fn ordering() -> &'static [&'static str] {
         &["-received_at"]
+    }
+
+    /// The one action the studio needs that the generic panel cannot express:
+    /// turning an accepted order into the customer, site and delivery it
+    /// implies. See [`crate::accept`].
+    fn bulk_actions() -> &'static [BulkAction] {
+        &[BulkAction {
+            name: crate::accept::ACTION,
+            label: crate::accept::LABEL,
+            // Not destructive — it only creates rows — but it does have an
+            // effect nobody wants to trigger by a stray click on a list, and
+            // running it on the wrong order leaves a customer to clean up.
+            destructive: false,
+            confirm: true,
+            permission: None,
+        }]
+    }
+
+    fn execute_bulk_action<'a>(
+        action: &'a str,
+        ids: &'a [i64],
+        db: &'a Db,
+        _ctx: &'a BulkActionContext<'a>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<BulkActionResult>> + Send + 'a>>
+    {
+        Box::pin(async move {
+            match action {
+                crate::accept::ACTION => crate::accept::accept_orders(db, ids).await,
+                _ => Ok(BulkActionResult::default()),
+            }
+        })
     }
 
     /// What the customer typed, and what the request carried, are facts about

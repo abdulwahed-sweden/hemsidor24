@@ -8,6 +8,7 @@
 //! Nothing here patches, forks or works around it — where it did not fit, the
 //! schema moved (see migrations 0002 and 0003), not the framework.
 
+mod accept;
 mod logging;
 mod models;
 
