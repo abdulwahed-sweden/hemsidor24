@@ -15,8 +15,8 @@ pub mod smtp;
 use std::sync::Mutex;
 
 pub use message::{
-    Message, customer_confirmation, proposal_accepted, proposal_ready, site_published,
-    studio_notification,
+    Message, customer_confirmation, order_cancelled, proposal_accepted, proposal_ready,
+    refund_issued, site_published, studio_notification,
 };
 pub use smtp::{SmtpConfig, SmtpNotifier};
 use thiserror::Error;

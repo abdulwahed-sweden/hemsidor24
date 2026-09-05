@@ -309,9 +309,13 @@ mod tests {
             "no domain is recorded, so none may be claimed transferred"
         );
 
-        // Hosting and source are recorded, so they follow the build: signed
-        // when the handover feature is on, and never claimed when it is off.
-        let signing_on = cfg!(feature = "handover");
+        // Hosting and source are recorded, so they follow whether a claim
+        // could actually be signed — the feature being compiled in and a cell
+        // being configured. Asking only about the feature made this test
+        // depend on whether HANDOVER_CELL_DIR happened to be exported in the
+        // shell, which is how it came to pass in one terminal and fail in
+        // another while the code was identical.
+        let signing_on = crate::signing::configured();
         assert_eq!(
             flags.1, signing_on,
             "hosting flag must match whether a claim was signed"

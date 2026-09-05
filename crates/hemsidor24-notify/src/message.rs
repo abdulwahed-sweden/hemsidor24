@@ -241,6 +241,79 @@ pub fn site_published(
     }
 }
 
+/// Öre as kronor, the Swedish way. Integer arithmetic: a price is not a float.
+fn kronor(ore: u32) -> String {
+    format!("{} kr", ore / 100)
+}
+
+/// The message confirming an order was called off.
+///
+/// Says plainly that nothing is owed. That is the promise being kept — "gillar
+/// du det inte betalar du ingenting" — and a cancellation notice that left it
+/// unsaid would be the one moment the customer most needs to hear it.
+pub fn order_cancelled(company: &str, to_customer: &str, from: &str, studio: &str) -> Message {
+    let body = format!(
+        "Hej {company},\n\
+         \n\
+         Vi har avbrutit din beställning. Du är inte skyldig oss något.\n\
+         \n\
+         Har du redan betalat hör vi av oss om återbetalningen.\n\
+         \n\
+         Vill du börja om någon gång är du välkommen tillbaka.\n\
+         \n\
+         Hemsidor24\n\
+         {studio}\n",
+        company = company,
+        studio = studio,
+    );
+
+    Message {
+        to: to_customer.to_owned(),
+        from: from.to_owned(),
+        reply_to: Some(studio.to_owned()),
+        subject: "Din beställning är avbruten — Hemsidor24".to_owned(),
+        body,
+    }
+}
+
+/// The message confirming money is going back.
+///
+/// The amount is derived from the package rather than typed, so a receipt can
+/// never quote a figure the customer was not charged.
+pub fn refund_issued(
+    company: &str,
+    package: hemsidor24_core::Package,
+    reason: &str,
+    to_customer: &str,
+    from: &str,
+    studio: &str,
+) -> Message {
+    let body = format!(
+        "Hej {company},\n\
+         \n\
+         Vi betalar tillbaka {amount} till dig.\n\
+         \n\
+         Anledning: {reason}\n\
+         \n\
+         Pengarna är på väg. Hör av dig om de inte kommit fram.\n\
+         \n\
+         Hemsidor24\n\
+         {studio}\n",
+        company = company,
+        amount = kronor(package.price_ore_inc_vat()),
+        reason = reason,
+        studio = studio,
+    );
+
+    Message {
+        to: to_customer.to_owned(),
+        from: from.to_owned(),
+        reply_to: Some(studio.to_owned()),
+        subject: "Återbetalning — Hemsidor24".to_owned(),
+        body,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,6 +454,55 @@ mod tests {
         assert!(m.body.contains("https://malmobygg.se"));
         assert!(m.body.contains("i ditt namn"));
         assert!(m.body.contains("inte bunden till"));
+    }
+
+    #[test]
+    fn the_cancellation_mail_says_nothing_is_owed() {
+        let m = order_cancelled(
+            "Malmö Bygg AB",
+            "kontakt@malmobygg.se",
+            "no-reply@example.se",
+            "studio@example.se",
+        );
+        assert_eq!(m.subject, "Din beställning är avbruten — Hemsidor24");
+        assert!(m.body.contains("inte skyldig oss något"));
+    }
+
+    #[test]
+    fn the_refund_mail_quotes_the_price_the_customer_paid() {
+        let start = refund_issued(
+            "X AB",
+            hemsidor24_core::Package::Start,
+            "Kunden ångrade sig",
+            "a@b.se",
+            "no-reply@example.se",
+            "studio@example.se",
+        );
+        assert!(start.body.contains("3112 kr"), "{}", start.body);
+        assert!(start.body.contains("Kunden ångrade sig"));
+
+        let pro = refund_issued(
+            "X AB",
+            hemsidor24_core::Package::Pro,
+            "Fel",
+            "a@b.se",
+            "no-reply@example.se",
+            "studio@example.se",
+        );
+        assert!(pro.body.contains("5612 kr"), "{}", pro.body);
+    }
+
+    #[test]
+    fn the_refund_amount_is_the_price_including_vat() {
+        // What the customer paid, not the ex-VAT headline on the page.
+        assert_eq!(
+            kronor(hemsidor24_core::Package::Start.price_ore_inc_vat()),
+            "3112 kr"
+        );
+        assert_eq!(
+            kronor(hemsidor24_core::Package::Pro.price_ore_inc_vat()),
+            "5612 kr"
+        );
     }
 
     #[test]

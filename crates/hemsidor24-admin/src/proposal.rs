@@ -28,7 +28,7 @@ pub const LABEL: &str = "Skicka utkast till kund";
 fn step() -> Step {
     Step {
         to: OrderStatus::UtkastSkickat,
-        stamp: "offered_at",
+        stamp: Some("offered_at"),
         message: hemsidor24_notify::proposal_ready,
     }
 }

@@ -54,6 +54,71 @@ pub struct Order {
     pub customer_id: Option<i64>,
 }
 
+/// What one studio action is: a name, a label, and the code that runs it.
+///
+/// The `run` field is why this type exists. Holding the handler beside the
+/// declaration is what stops a button existing without anything behind it.
+struct OrderAction {
+    name: &'static str,
+    label: &'static str,
+    destructive: bool,
+    run: Handler,
+}
+
+/// What a bulk action's code looks like from the dispatch table.
+///
+/// Boxed and pinned because the handlers are `async fn` with distinct bodies,
+/// and a table needs them to share one type. A plain `fn` pointer keeps the
+/// entries usable in a `const`.
+type Handler = for<'a> fn(
+    &'a Db,
+    &'a [i64],
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<BulkActionResult>> + Send + 'a>,
+>;
+
+/// The studio's workflow, in the order a job runs through it.
+const ORDER_ACTIONS: &[OrderAction] = &[
+    OrderAction {
+        name: crate::accept::ACTION,
+        label: crate::accept::LABEL,
+        destructive: false,
+        run: |db, ids| Box::pin(crate::accept::accept_orders(db, ids)),
+    },
+    OrderAction {
+        name: crate::proposal::ACTION,
+        label: crate::proposal::LABEL,
+        destructive: false,
+        run: |db, ids| Box::pin(crate::proposal::send_proposals(db, ids)),
+    },
+    OrderAction {
+        name: crate::acceptance::ACTION,
+        label: crate::acceptance::LABEL,
+        destructive: false,
+        run: |db, ids| Box::pin(crate::acceptance::record_acceptances(db, ids)),
+    },
+    OrderAction {
+        name: crate::publication::ACTION,
+        label: crate::publication::LABEL,
+        destructive: false,
+        run: |db, ids| Box::pin(crate::publication::publish_sites(db, ids)),
+    },
+    OrderAction {
+        name: crate::cancellation::CANCEL_ACTION,
+        label: crate::cancellation::CANCEL_LABEL,
+        // Ends the job, and Avbruten is terminal.
+        destructive: true,
+        run: |db, ids| Box::pin(crate::cancellation::cancel_orders(db, ids)),
+    },
+    OrderAction {
+        name: crate::cancellation::REFUND_ACTION,
+        label: crate::cancellation::REFUND_LABEL,
+        // Moves money. Not undoable from here.
+        destructive: true,
+        run: |db, ids| Box::pin(crate::cancellation::record_refunds(db, ids)),
+    },
+];
+
 impl ModelAdmin for Order {
     fn list_display() -> &'static [&'static str] {
         &["company", "city", "package", "status", "received_at"]
@@ -73,47 +138,29 @@ impl ModelAdmin for Order {
         &["-received_at"]
     }
 
-    /// The one action the studio needs that the generic panel cannot express:
-    /// turning an accepted order into the customer, site and delivery it
-    /// implies. See [`crate::accept`].
+    /// Every action the studio can run on an order.
+    ///
+    /// Declared and dispatched from one list on purpose. They used to be two —
+    /// a `bulk_actions` array and a `match` — and they drifted: `publish_site`
+    /// was declared with no arm, so the framework fell through to its default
+    /// and the button reported "0 of 0" with a redirect and no trace anywhere.
+    /// It looked like it worked. Sharing one entry makes that impossible.
     fn bulk_actions() -> &'static [BulkAction] {
-        &[
-            BulkAction {
-                name: crate::proposal::ACTION,
-                label: crate::proposal::LABEL,
-                // Emails a customer. Not destructive, but not takeable back.
-                destructive: false,
-                confirm: true,
-                permission: None,
-            },
-            BulkAction {
-                name: crate::publication::ACTION,
-                label: crate::publication::LABEL,
-                // Publishes, hands artefacts over and signs claims that cannot
-                // be unsigned. The most consequential button on the page.
-                destructive: false,
-                confirm: true,
-                permission: None,
-            },
-            BulkAction {
-                name: crate::acceptance::ACTION,
-                label: crate::acceptance::LABEL,
-                // Emails the customer and closes the money-back guarantee.
-                destructive: false,
-                confirm: true,
-                permission: None,
-            },
-            BulkAction {
-                name: crate::accept::ACTION,
-                label: crate::accept::LABEL,
-                // Not destructive — it only creates rows — but it does have an
-                // effect nobody wants to trigger by a stray click on a list, and
-                // running it on the wrong order leaves a customer to clean up.
-                destructive: false,
-                confirm: true,
-                permission: None,
-            },
-        ]
+        static DECLARED: std::sync::OnceLock<Vec<BulkAction>> = std::sync::OnceLock::new();
+        DECLARED.get_or_init(|| {
+            ORDER_ACTIONS
+                .iter()
+                .map(|a| BulkAction {
+                    name: a.name,
+                    label: a.label,
+                    destructive: a.destructive,
+                    // Every one of these emails a customer, moves money, or
+                    // ends a job. None should fire on a stray click.
+                    confirm: true,
+                    permission: None,
+                })
+                .collect()
+        })
     }
 
     fn execute_bulk_action<'a>(
@@ -124,19 +171,14 @@ impl ModelAdmin for Order {
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<BulkActionResult>> + Send + 'a>>
     {
         Box::pin(async move {
-            match action {
-                crate::publication::ACTION => crate::publication::publish_sites(db, ids).await,
-                crate::proposal::ACTION => crate::proposal::send_proposals(db, ids).await,
-                crate::acceptance::ACTION => crate::acceptance::record_acceptances(db, ids).await,
-                crate::accept::ACTION => crate::accept::accept_orders(db, ids).await,
-                // An action declared in `bulk_actions` with no arm here returns
-                // "0 of 0" and a redirect: the operator sees a button that does
-                // nothing and no trace anywhere. That happened once during
-                // development and took a while to find, so it is loud now.
-                other => {
+            match ORDER_ACTIONS.iter().find(|a| a.name == action) {
+                Some(entry) => (entry.run)(db, ids).await,
+                // Unreachable while both sides come from ORDER_ACTIONS, and
+                // loud if that ever stops being true.
+                None => {
                     log::error!(
-                        "bulk action {other:?} is declared on Order but has no handler; \
-                         {} row(s) were left untouched",
+                        "bulk action {action:?} reached Order with no entry; \
+                         {} row(s) left untouched",
                         ids.len()
                     );
                     Ok(BulkActionResult::default())

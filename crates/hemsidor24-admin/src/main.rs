@@ -10,6 +10,7 @@
 
 mod accept;
 mod acceptance;
+mod cancellation;
 mod logging;
 mod mail;
 mod models;

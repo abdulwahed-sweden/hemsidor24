@@ -76,6 +76,17 @@ mod enabled {
             .as_ref()
     }
 
+    /// Whether a cell is configured at all.
+    ///
+    /// Exists for tests. Whether a handover gets signed depends on two things
+    /// — the feature being on *and* `HANDOVER_CELL_DIR` pointing somewhere —
+    /// and a test that checks only the first silently passes or fails on
+    /// whatever happens to be in the environment.
+    #[cfg(test)]
+    pub fn configured() -> bool {
+        cell_dir().is_some()
+    }
+
     /// Report at startup whether signing is configured, and open the cell once
     /// so a broken one is found now rather than mid-handover.
     ///
@@ -176,6 +187,12 @@ mod enabled {
     /// Nothing to set up when the feature is off.
     pub fn init() {}
 
+    /// Never configured: without the feature there is nothing to sign with.
+    #[cfg(test)]
+    pub fn configured() -> bool {
+        false
+    }
+
     /// Signs nothing, and says so once at the point it would have.
     pub async fn sign(_customer_id: i64, _artefacts: &Artefacts) -> Signed {
         log::info!("built without the handover feature — nothing signed");
@@ -183,4 +200,6 @@ mod enabled {
     }
 }
 
+#[cfg(test)]
+pub use enabled::configured;
 pub use enabled::{init, sign};

@@ -24,7 +24,7 @@ pub const LABEL: &str = "Registrera godkännande";
 fn step() -> Step {
     Step {
         to: OrderStatus::Godkand,
-        stamp: "accepted_at",
+        stamp: Some("accepted_at"),
         message: hemsidor24_notify::proposal_accepted,
     }
 }

@@ -31,7 +31,11 @@ pub struct Step {
     pub to: OrderStatus,
     /// Column on `deliveries` to stamp with the current time, if the order has
     /// a delivery yet. A fixed name chosen at the call site — never input.
-    pub stamp: &'static str,
+    ///
+    /// `None` for a step that marks no moment on the delivery. Cancelling is
+    /// one: the delivery records what was handed over, and an order that was
+    /// called off never reached that.
+    pub stamp: Option<&'static str>,
     /// What the customer is told. Both messages take the same shape, which is
     /// why a plain function pointer is enough.
     pub message: fn(&str, Package, &str, &str, &str) -> Message,
@@ -68,7 +72,9 @@ pub async fn advance(db: &Db, order_id: i64, step: &Step) -> Result<(), String> 
         .await
         .map_err(|e| format!("statusen kunde inte sparas: {e}"))?;
 
-    stamp_delivery(db, order.id, step.stamp).await;
+    if let Some(column) = step.stamp {
+        stamp_delivery(db, order.id, column).await;
+    }
 
     // Notify second.
     match crate::mail::get() {
