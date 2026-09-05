@@ -77,16 +77,26 @@ impl ModelAdmin for Order {
     /// turning an accepted order into the customer, site and delivery it
     /// implies. See [`crate::accept`].
     fn bulk_actions() -> &'static [BulkAction] {
-        &[BulkAction {
-            name: crate::accept::ACTION,
-            label: crate::accept::LABEL,
-            // Not destructive — it only creates rows — but it does have an
-            // effect nobody wants to trigger by a stray click on a list, and
-            // running it on the wrong order leaves a customer to clean up.
-            destructive: false,
-            confirm: true,
-            permission: None,
-        }]
+        &[
+            BulkAction {
+                name: crate::proposal::ACTION,
+                label: crate::proposal::LABEL,
+                // Emails a customer. Not destructive, but not takeable back.
+                destructive: false,
+                confirm: true,
+                permission: None,
+            },
+            BulkAction {
+                name: crate::accept::ACTION,
+                label: crate::accept::LABEL,
+                // Not destructive — it only creates rows — but it does have an
+                // effect nobody wants to trigger by a stray click on a list, and
+                // running it on the wrong order leaves a customer to clean up.
+                destructive: false,
+                confirm: true,
+                permission: None,
+            },
+        ]
     }
 
     fn execute_bulk_action<'a>(
@@ -98,6 +108,7 @@ impl ModelAdmin for Order {
     {
         Box::pin(async move {
             match action {
+                crate::proposal::ACTION => crate::proposal::send_proposals(db, ids).await,
                 crate::accept::ACTION => crate::accept::accept_orders(db, ids).await,
                 _ => Ok(BulkActionResult::default()),
             }

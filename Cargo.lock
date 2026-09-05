@@ -1140,6 +1140,7 @@ name = "hemsidor24-admin"
 version = "0.1.0"
 dependencies = [
  "hemsidor24-core",
+ "hemsidor24-notify",
  "log",
  "rustio-admin",
  "thiserror 2.0.20",

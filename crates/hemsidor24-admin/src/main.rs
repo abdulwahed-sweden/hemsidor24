@@ -10,7 +10,9 @@
 
 mod accept;
 mod logging;
+mod mail;
 mod models;
+mod proposal;
 
 use std::net::{IpAddr, SocketAddr};
 
@@ -65,6 +67,7 @@ fn required(var: &'static str) -> Result<String, StartupError> {
 #[tokio::main]
 async fn main() -> Result<(), StartupError> {
     logging::init();
+    mail::init();
 
     let database_url = required("DATABASE_URL")?;
 

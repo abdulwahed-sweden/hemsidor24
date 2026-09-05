@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 hemsidor24-core.workspace = true
+hemsidor24-notify = { path = "../hemsidor24-notify" }
 
 # Consumed as-is. Nothing in this crate patches or forks it.
 #

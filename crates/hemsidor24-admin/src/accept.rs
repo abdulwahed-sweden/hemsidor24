@@ -307,12 +307,13 @@ mod tests {
 
     #[test]
     fn the_action_is_registered_on_the_order_model() {
-        let actions = <Order as ModelAdmin>::bulk_actions();
-        assert_eq!(actions.len(), 1);
-        assert_eq!(actions[0].name, ACTION);
-        assert_eq!(actions[0].label, LABEL);
+        let action = <Order as ModelAdmin>::bulk_actions()
+            .iter()
+            .find(|a| a.name == ACTION)
+            .expect("the accept action is registered");
+        assert_eq!(action.label, LABEL);
         assert!(
-            actions[0].confirm,
+            action.confirm,
             "an irreversible create should confirm first"
         );
         assert_eq!(Order::TABLE, "orders");

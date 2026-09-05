@@ -51,6 +51,15 @@ impl OrderStatus {
         }
     }
 
+    /// Read a status back from the slug stored in the database.
+    ///
+    /// The inverse of [`OrderStatus::slug`]. Anything reading the `orders`
+    /// table gets a `TEXT` column back and has to decide what it means; doing
+    /// that with a `match` at each call site is how the rules drift apart.
+    pub fn from_slug(slug: &str) -> Option<OrderStatus> {
+        OrderStatus::ALL.into_iter().find(|s| s.slug() == slug)
+    }
+
     /// Label as shown in the back office.
     pub const fn label_sv(self) -> &'static str {
         match self {
@@ -185,6 +194,20 @@ mod tests {
             err.to_string(),
             "cannot move an order from ny to publicerad"
         );
+    }
+
+    #[test]
+    fn every_slug_reads_back_to_the_status_that_wrote_it() {
+        for status in OrderStatus::ALL {
+            assert_eq!(OrderStatus::from_slug(status.slug()), Some(status));
+        }
+        assert_eq!(
+            OrderStatus::from_slug("godkänd"),
+            None,
+            "the label is not the slug"
+        );
+        assert_eq!(OrderStatus::from_slug(""), None);
+        assert_eq!(OrderStatus::from_slug("unknown"), None);
     }
 
     #[test]

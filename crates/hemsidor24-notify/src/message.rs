@@ -106,6 +106,57 @@ pub fn customer_confirmation(order: &Order, to_studio: &str, from: &str) -> Mess
     }
 }
 
+/// The message telling the customer their proposal is ready to look at.
+///
+/// Sent when the studio moves an order to "Utkast skickat". Until this existed
+/// the customer heard nothing between ordering and the site appearing, which
+/// left the one promise the product is built on — a proposal within a day,
+/// before any money changes hands — depending on somebody remembering to write
+/// an email by hand.
+///
+/// Takes the company and package rather than a whole [`Order`] because the
+/// back office reads its rows as plain columns, and reconstructing a validated
+/// order just to address an envelope would be work for its own sake. The
+/// package is the typed one so the price cannot drift from what was quoted.
+pub fn proposal_ready(
+    company: &str,
+    package: hemsidor24_core::Package,
+    to_customer: &str,
+    from: &str,
+    studio: &str,
+) -> Message {
+    let body = format!(
+        "Hej {company},\n\
+         \n\
+         Ditt förslag är klart. Vi hör av oss med en länk till sidan, så att du\n\
+         kan se den innan den publiceras.\n\
+         \n\
+         Du betalar först när du sett sidan och sagt ja. Vill du inte ha den\n\
+         kostar det ingenting.\n\
+         \n\
+         Detta gäller din beställning:\n\
+         \n\
+         Paket:    {package} ({price} kr exkl. moms)\n\
+         \n\
+         Svara på det här mejlet om något ser fel ut.\n\
+         \n\
+         Hemsidor24\n\
+         {studio}\n",
+        company = company,
+        package = package.label_sv(),
+        price = package.price_sek_ex_vat(),
+        studio = studio,
+    );
+
+    Message {
+        to: to_customer.to_owned(),
+        from: from.to_owned(),
+        reply_to: Some(studio.to_owned()),
+        subject: "Ditt förslag är klart — Hemsidor24".to_owned(),
+        body,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,11 +221,50 @@ mod tests {
     }
 
     #[test]
+    fn the_proposal_mail_goes_to_the_customer_and_quotes_their_package() {
+        let m = proposal_ready(
+            "Malmö Bygg AB",
+            hemsidor24_core::Package::Pro,
+            "kontakt@malmobygg.se",
+            "no-reply@example.se",
+            "studio@example.se",
+        );
+        assert_eq!(m.to, "kontakt@malmobygg.se");
+        assert_eq!(m.reply_to.as_deref(), Some("studio@example.se"));
+        assert_eq!(m.subject, "Ditt förslag är klart — Hemsidor24");
+        assert!(m.body.contains("Malmö Bygg AB"));
+        assert!(m.body.contains("Pro (4490 kr exkl. moms)"));
+    }
+
+    #[test]
+    fn the_proposal_mail_repeats_the_promise_it_settles() {
+        let m = proposal_ready(
+            "X AB",
+            hemsidor24_core::Package::Start,
+            "a@b.se",
+            "no-reply@example.se",
+            "studio@example.se",
+        );
+        // The guarantee is the reason this mail exists; it must not go out
+        // implying the customer already owes something.
+        assert!(m.body.contains("Du betalar först när du sett sidan"));
+        assert!(m.body.contains("kostar det ingenting"));
+        assert!(m.body.contains("2490 kr exkl. moms"));
+    }
+
+    #[test]
     fn no_line_is_too_wide_to_read_on_a_phone() {
         let order = order();
         for m in [
             studio_notification(&order, 7, "studio@example.se", "no-reply@example.se"),
             customer_confirmation(&order, "studio@example.se", "no-reply@example.se"),
+            proposal_ready(
+                "Malmö Bygg AB",
+                hemsidor24_core::Package::Pro,
+                "kontakt@malmobygg.se",
+                "no-reply@example.se",
+                "studio@example.se",
+            ),
         ] {
             for line in m.body.lines() {
                 assert!(
