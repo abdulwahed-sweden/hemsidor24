@@ -1161,6 +1161,7 @@ dependencies = [
  "sijill-cell",
  "sijill-core",
  "sijill-dialect",
+ "sijill-dialect-handoff",
  "thiserror 2.0.20",
 ]
 
@@ -2641,7 +2642,7 @@ dependencies = [
 [[package]]
 name = "sijill-cell"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "anyhow",
  "argon2",
@@ -2663,7 +2664,7 @@ dependencies = [
 [[package]]
 name = "sijill-core"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "sijill-crypto",
 ]
@@ -2671,7 +2672,7 @@ dependencies = [
 [[package]]
 name = "sijill-crypto"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "blake3",
  "ed25519-dalek",
@@ -2682,15 +2683,24 @@ dependencies = [
 [[package]]
 name = "sijill-dialect"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "sijill-core",
 ]
 
 [[package]]
+name = "sijill-dialect-handoff"
+version = "0.1.0"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
+dependencies = [
+ "sijill-core",
+ "sijill-dialect",
+]
+
+[[package]]
 name = "sijill-evidence"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "sijill-core",
  "sijill-crypto",
@@ -2699,7 +2709,7 @@ dependencies = [
 [[package]]
 name = "sijill-store"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "redb",
  "sijill-core",
@@ -2709,7 +2719,7 @@ dependencies = [
 [[package]]
 name = "sijill-sync"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "sijill-core",
  "sijill-crypto",
@@ -2719,7 +2729,7 @@ dependencies = [
 [[package]]
 name = "sijill-trust"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "sijill-core",
  "sijill-dialect",
@@ -2729,7 +2739,7 @@ dependencies = [
 [[package]]
 name = "sijill-witness"
 version = "0.1.0"
-source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09#b1245ce1e40ccaf8a22a95ce9f4159459d6c4b09"
+source = "git+https://github.com/abdulwahed-sweden/sijill-protocol.git?rev=17dd4cf00baf4e3630840759e00770a7ba03c741#17dd4cf00baf4e3630840759e00770a7ba03c741"
 dependencies = [
  "sijill-core",
  "sijill-dialect",

@@ -1,11 +1,8 @@
-//! End-to-end: create the studio's cell, sign one job's worth of claims, read
-//! them back, verify them, and render the receipt.
-//!
-//! Only compiled when the `handover` feature is on.
+//! End-to-end: sign a real handover into the studio's chain with the
+//! first-party handoff dialect, read it back, and render the receipt.
 #![cfg(feature = "handover")]
 
-use hemsidor24_core::Package;
-use hemsidor24_handover::{Body, Event, Studio, receipt};
+use hemsidor24_handover::{Asset, Event, JournalEntry, Studio, Transfer, receipt};
 
 /// A cell in a temporary directory, removed when the test ends.
 struct TempCell {
@@ -29,161 +26,167 @@ impl Drop for TempCell {
     }
 }
 
-/// One job, start to finish: proposal shown, accepted, a revision spent, then
-/// the domain and source handed over.
+fn promised() -> Vec<Transfer> {
+    vec![
+        Transfer::new(Asset::Domain, "malmobygg.se"),
+        Transfer::new(Asset::Hosting, "loopia:558812"),
+        Transfer::new(Asset::SourceCode, "https://github.com/hemsidor24/malmobygg"),
+    ]
+}
+
 #[test]
-fn a_whole_job_is_signed_read_back_and_rendered() {
-    let temp = TempCell::new("whole-job");
+fn each_promised_asset_becomes_its_own_signed_claim() {
+    let temp = TempCell::new("assets");
     let studio = Studio::create(&temp.dir).expect("cell created");
 
-    let order = 42u64;
-    let site = 7u64;
+    let issued = studio
+        .transfer_ownership(42, &promised())
+        .expect("transferred");
+    assert_eq!(issued.len(), 3, "the three promises move separately");
 
-    studio.offer_delivery(order, site).expect("offered");
-    studio.accept_delivery(order, site).expect("accepted");
-    studio.use_revision(order, site, 1).expect("revision");
+    let history = studio.history().expect("history");
+    assert_eq!(history.len(), 3);
+
+    for (_, _, body) in &history {
+        assert_eq!(body.event, Event::Released, "the studio gives custody up");
+        assert_eq!(
+            body.counterparty.as_deref(),
+            Some("cus-42"),
+            "Released names the receiving party"
+        );
+        assert!(body.party.is_none(), "the cell speaks for itself");
+    }
+
+    let items: Vec<&str> = history.iter().map(|(_, _, b)| b.item.as_str()).collect();
+    assert!(items.contains(&"dom:malmobygg.se"));
+    assert!(items.contains(&"host:loopia:558812"));
+    assert!(items.contains(&"src:https://github.com/hemsidor24/malmobygg"));
+}
+
+#[test]
+fn no_customer_identity_reaches_a_signed_body() {
+    let temp = TempCell::new("privacy");
+    let studio = Studio::create(&temp.dir).expect("created");
     studio
-        .transfer_ownership(
-            order,
-            site,
-            "malmobygg.se",
-            "https://github.com/hemsidor24/malmobygg",
-        )
+        .transfer_ownership(42, &promised())
         .expect("transferred");
 
-    let history = studio.history_for_order(order).expect("history");
-    assert_eq!(history.len(), 4, "every claim should come back");
-
-    let events: Vec<Event> = history.iter().map(|(_, _, body)| body.event).collect();
-    assert_eq!(
-        events,
-        [
-            Event::DeliveryOffered,
-            Event::DeliveryAccepted,
-            Event::RevisionUsed,
-            Event::OwnershipTransferred,
-        ],
-        "and in the order they were signed"
-    );
-
-    let transfer = &history[3].2;
-    assert_eq!(transfer.domain, "malmobygg.se");
-    assert_eq!(transfer.repo_url, "https://github.com/hemsidor24/malmobygg");
-    assert_eq!(transfer.site_ref, site);
-
-    let text = receipt::render(&studio.cell().id().to_string(), order, &history);
-    for expected in [
-        "ÖVERLÄMNINGSKVITTO",
-        "Beställning:  #42",
-        "Förslag visat",
-        "Förslag godkänt",
-        "Revidering använd",
-        "Äganderätt överförd",
-        "malmobygg.se",
-        "https://github.com/hemsidor24/malmobygg",
-        "VAD DETTA INTE VISAR",
-        "Kunden driver ingen egen cell",
-    ] {
-        assert!(
-            text.contains(expected),
-            "receipt is missing {expected:?}:\n{text}"
-        );
+    for (_, _, body) in studio.history().expect("history") {
+        let rendered = format!("{body:?}");
+        for leaked in ["Malmö Bygg", "kontakt@", "070-", "Mansour"] {
+            assert!(!rendered.contains(leaked), "signed body leaked {leaked:?}");
+        }
     }
 }
 
-/// The chain is the studio's own, and reopening it must not lose anything.
+#[test]
+fn a_discharge_names_the_release_it_closes() {
+    let temp = TempCell::new("discharge");
+    let studio = Studio::create(&temp.dir).expect("created");
+
+    let domain = Transfer::new(Asset::Domain, "malmobygg.se");
+    let released = studio
+        .transfer_ownership(7, std::slice::from_ref(&domain))
+        .expect("released");
+    let release_id = released[0].id;
+
+    let discharged = studio.discharge(&domain, release_id).expect("discharged");
+    let body = &studio.history().expect("history")[1].2;
+
+    assert_eq!(body.event, Event::Discharged);
+    assert_eq!(
+        body.acknowledges.as_ref(),
+        Some(&release_id),
+        "the pair can be checked instead of guessed at"
+    );
+    assert!(
+        body.counterparty.is_none(),
+        "the dialect refuses a counterparty on Discharged"
+    );
+    assert_eq!(discharged.claim.cell, released[0].claim.cell);
+}
+
+#[test]
+fn a_transfer_naming_nothing_is_refused_before_signing() {
+    let temp = TempCell::new("empty");
+    let studio = Studio::create(&temp.dir).expect("created");
+    assert!(studio.transfer_ownership(1, &[]).is_err());
+    assert!(
+        studio.history().expect("history").is_empty(),
+        "nothing was signed"
+    );
+}
+
 #[test]
 fn claims_survive_closing_and_reopening_the_cell() {
     let temp = TempCell::new("reopen");
     {
         let studio = Studio::create(&temp.dir).expect("created");
-        studio.offer_delivery(1, 1).expect("offered");
-        studio.accept_delivery(1, 1).expect("accepted");
+        studio
+            .transfer_ownership(1, &promised())
+            .expect("transferred");
     }
     let studio = Studio::open(&temp.dir).expect("reopened");
-    assert_eq!(studio.history().expect("history").len(), 2);
+    assert_eq!(studio.history().expect("history").len(), 3);
 }
 
-/// A refund is priced from the package, not from a number typed at the call
-/// site, so the receipt cannot quote an amount the customer was never charged.
-#[test]
-fn a_refund_records_the_price_the_customer_was_quoted() {
-    let temp = TempCell::new("refund");
-    let studio = Studio::create(&temp.dir).expect("created");
-
-    studio
-        .refund(9, Package::Start, "Kunden nöjd ej före publicering")
-        .expect("refunded");
-    studio
-        .refund(10, Package::Pro, "Ångrade sig")
-        .expect("refunded");
-
-    let history = studio.history().expect("history");
-    assert_eq!(
-        history[0].2.refund_ore,
-        u64::from(Package::Start.price_ore_inc_vat())
-    );
-    assert_eq!(
-        history[1].2.refund_ore,
-        u64::from(Package::Pro.price_ore_inc_vat())
-    );
-
-    let text = receipt::render("cell", 9, &studio.history_for_order(9).expect("h"));
-    assert!(text.contains("3112,50 kr"), "{text}");
-}
-
-/// Claims about one order must not leak into another order's receipt.
-#[test]
-fn a_receipt_covers_one_order_only() {
-    let temp = TempCell::new("scoped");
-    let studio = Studio::create(&temp.dir).expect("created");
-
-    studio.offer_delivery(1, 1).expect("offered");
-    studio
-        .transfer_ownership(2, 2, "annan.se", "https://github.com/x/annan")
-        .expect("other");
-
-    let first = studio.history_for_order(1).expect("history");
-    assert_eq!(first.len(), 1);
-
-    let text = receipt::render("cell", 1, &first);
-    assert!(
-        !text.contains("annan.se"),
-        "another order's domain leaked in:\n{text}"
-    );
-}
-
-/// A record's stored identifier is the hash of its content, so altering the
-/// content makes the two disagree. This is the check `SignedClaim::verify`
-/// performs before it looks at the signature at all.
 #[test]
 fn altering_a_signed_claim_breaks_its_content_address() {
     let temp = TempCell::new("verify");
     let studio = Studio::create(&temp.dir).expect("created");
     studio
-        .transfer_ownership(5, 5, "exempel.se", "https://github.com/x/exempel")
+        .transfer_ownership(5, &promised())
         .expect("transferred");
 
     let history = studio.history().expect("history");
     let (_, signed, _) = &history[0];
-
-    // Untouched: the stored id is the content address.
     assert_eq!(signed.claim.id().expect("hashes"), signed.id);
 
-    // Move the timestamp by one millisecond and they no longer agree.
     let mut tampered = signed.clone();
     tampered.claim.timestamp_ms += 1;
-    assert_ne!(
-        tampered.claim.id().expect("hashes"),
-        tampered.id,
-        "altered content must not keep its identifier"
-    );
+    assert_ne!(tampered.claim.id().expect("hashes"), tampered.id);
+}
 
-    // Same for the body: rewrite the domain that was handed over.
-    let mut swapped = signed.clone();
-    if let Body::Inline(bytes) = &mut swapped.claim.body {
-        let last = bytes.len() - 1;
-        bytes[last] ^= 0xff;
+#[test]
+fn the_receipt_carries_both_evidence_tiers_and_names_neither_protocol_nor_customer() {
+    let temp = TempCell::new("receipt");
+    let studio = Studio::create(&temp.dir).expect("created");
+    studio
+        .transfer_ownership(42, &promised())
+        .expect("transferred");
+
+    let journal = vec![
+        JournalEntry::new("2026-09-04", "Förslag visat")
+            .settling("Du ser förslaget innan sidan publiceras."),
+        JournalEntry::new("2026-09-05", "Förslag godkänt")
+            .settling("Ni betalar först när ni sett sidan."),
+        JournalEntry::new("2026-09-06", "Revidering 1 använd").settling("En revidering ingår."),
+    ];
+    let signed = studio.history_for_customer(42).expect("history");
+    let text = receipt::render(&studio.cell().id().to_string(), 42, &journal, &signed);
+
+    for expected in [
+        "ÖVERLÄMNINGSKVITTO",
+        "Beställning:  #42",
+        "Förslag visat",
+        "Revidering 1 använd",
+        "studiojournal",
+        "Domän",
+        "malmobygg.se",
+        "signerat",
+        "VAD DETTA INTE VISAR",
+        "Kunden har inte undertecknat något här",
+    ] {
+        assert!(
+            text.contains(expected),
+            "receipt missing {expected:?}:\n{text}"
+        );
     }
-    assert_ne!(swapped.claim.id().expect("hashes"), swapped.id);
+
+    // The customer's own reference is an internal code; it has no place on a
+    // document handed to that same customer.
+    assert!(
+        !text.contains("cus-42"),
+        "internal reference leaked onto the receipt"
+    );
 }

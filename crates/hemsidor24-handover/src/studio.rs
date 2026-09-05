@@ -1,16 +1,21 @@
-//! The studio's cell.
+//! The studio's cell, speaking the first-party handoff dialect.
 //!
-//! One cell, one key, one chain. The studio signs what it did; nobody else
-//! signs anything. What that is and is not worth is set out in the crate docs
-//! and in the README — read those before showing a receipt to anyone.
+//! One cell, one key, one chain. This crate defines **no dialect of its own**:
+//! ownership passing from the studio to a customer is a custody event, and
+//! `sijill-dialect-handoff` already says what a custody event is. A private
+//! schema for it would be this company's word for something the domain already
+//! has a word for.
+//!
+//! What it does own is the decision about *which* business facts are worth a
+//! signed claim at all — see the crate docs.
 
-use hemsidor24_core::Package;
 use sijill_cell::{Cell, CellError};
-use sijill_core::SignedClaim;
+use sijill_core::{ClaimId, SignedClaim};
 use sijill_dialect::Dialect;
+use sijill_dialect_handoff::{Event, Handoff};
 use thiserror::Error;
 
-use crate::claim::{Event, HandoverClaim};
+use crate::asset::{Asset, Transfer, customer_ref};
 
 /// Something that went wrong issuing or reading a claim.
 #[derive(Debug, Error)]
@@ -18,26 +23,29 @@ pub enum HandoverError {
     /// The cell could not be created, opened, written to or read.
     #[error("the handover cell could not be used")]
     Cell(#[from] CellError),
-    /// The claim would not encode — a field over its limit, caught before
+    /// The claim would not encode — a reference over its bound, caught before
     /// anything was signed.
-    #[error("the claim could not be encoded")]
-    Encode(#[from] sijill_dialect::DialectError),
+    #[error("the handoff claim could not be built")]
+    Dialect(#[from] sijill_dialect::DialectError),
+    /// Nothing was handed over, so there is nothing to sign.
+    #[error("a transfer must name at least one asset")]
+    NothingToTransfer,
 }
+
+/// One signed handoff claim, with the body already decoded.
+pub type Entry = (u64, SignedClaim, Handoff);
 
 /// The studio, as a Sijill cell.
 ///
 /// Wraps [`Cell`] rather than reimplementing any of it: the chain, the
-/// canonical encoding, the signatures and the log are all the protocol's.
-/// What this adds is the studio's vocabulary.
+/// canonical encoding, the signatures and the log are all the protocol's, and
+/// the claim bodies are the handoff dialect's.
 pub struct Studio {
     cell: Cell,
 }
 
 impl Studio {
     /// Create the studio's cell at `dir`, generating its key.
-    ///
-    /// Refuses to overwrite an existing key — the key *is* the cell, and a
-    /// replaced one cannot continue the chain.
     pub fn create(dir: impl AsRef<std::path::Path>) -> Result<Self, HandoverError> {
         Ok(Studio {
             cell: Cell::create(dir)?,
@@ -51,93 +59,71 @@ impl Studio {
         })
     }
 
-    /// The underlying cell, for anything this wrapper does not cover.
+    /// The underlying cell.
     pub fn cell(&self) -> &Cell {
         &self.cell
     }
 
-    /// Sign one claim into the studio's chain.
-    pub fn issue(&self, claim: &HandoverClaim) -> Result<SignedClaim, HandoverError> {
-        Ok(self.cell.issue(claim)?)
-    }
-
-    /// Record that a proposal was shown, before publication.
+    /// Sign that the named artefacts passed to the customer.
     ///
-    /// This is the promise "du ser förslaget innan sidan publiceras" coming
-    /// due, and the moment the money-back guarantee starts to matter.
-    pub fn offer_delivery(
-        &self,
-        order_ref: u64,
-        site_ref: u64,
-    ) -> Result<SignedClaim, HandoverError> {
-        self.issue(&HandoverClaim::new(Event::DeliveryOffered, order_ref).for_site(site_ref))
-    }
-
-    /// Record that the customer accepted the proposal.
-    pub fn accept_delivery(
-        &self,
-        order_ref: u64,
-        site_ref: u64,
-    ) -> Result<SignedClaim, HandoverError> {
-        self.issue(&HandoverClaim::new(Event::DeliveryAccepted, order_ref).for_site(site_ref))
-    }
-
-    /// Record that a revision was spent. Revision 1 is the included one.
-    pub fn use_revision(
-        &self,
-        order_ref: u64,
-        site_ref: u64,
-        revision: u32,
-    ) -> Result<SignedClaim, HandoverError> {
-        self.issue(
-            &HandoverClaim::new(Event::RevisionUsed, order_ref)
-                .for_site(site_ref)
-                .revision(revision),
-        )
-    }
-
-    /// Record a refund under the guarantee.
+    /// One `Released` claim per artefact, because they move separately and a
+    /// reader asking "was the domain actually put in their name" should not
+    /// have to unpack a bundle to find out. Each names the customer as
+    /// counterparty, which the dialect requires for `Released`.
     ///
-    /// Takes the [`Package`] rather than a number so the amount cannot drift
-    /// from the price the customer was actually quoted.
-    pub fn refund(
-        &self,
-        order_ref: u64,
-        package: Package,
-        reason: impl Into<String>,
-    ) -> Result<SignedClaim, HandoverError> {
-        self.issue(
-            &HandoverClaim::new(Event::RefundIssued, order_ref)
-                .refunding_ore(u64::from(package.price_ore_inc_vat()))
-                .with_note(reason),
-        )
-    }
-
-    /// Record that the domain, the hosting and the source passed to the
-    /// customer — the promise that gets disputed most.
+    /// This is the only business fact this crate signs. Everything else the
+    /// studio does — showing a proposal, recording an acceptance, spending a
+    /// revision, issuing a refund — is commercial state that already lives in
+    /// Postgres under the back office's audit trail, and is carried into the
+    /// receipt from there.
     pub fn transfer_ownership(
         &self,
-        order_ref: u64,
-        site_ref: u64,
-        domain: impl Into<String>,
-        repo_url: impl Into<String>,
-    ) -> Result<SignedClaim, HandoverError> {
-        self.issue(
-            &HandoverClaim::new(Event::OwnershipTransferred, order_ref)
-                .for_site(site_ref)
-                .transferring(domain, repo_url),
-        )
+        customer_id: i64,
+        transfers: &[Transfer],
+    ) -> Result<Vec<SignedClaim>, HandoverError> {
+        if transfers.is_empty() {
+            return Err(HandoverError::NothingToTransfer);
+        }
+
+        let counterparty = customer_ref(customer_id);
+        let mut issued = Vec::with_capacity(transfers.len());
+
+        for transfer in transfers {
+            let body = Handoff::new(transfer.item_ref(), Event::Released)?
+                .with_counterparty(counterparty.clone())?;
+            issued.push(self.cell.issue(&body)?);
+        }
+
+        Ok(issued)
     }
 
-    /// Every handover claim this cell has signed, oldest first.
+    /// Sign that the studio's custody of an artefact has ended.
     ///
-    /// Claims in other dialects are skipped: the chain may hold checkpoints and
+    /// `Discharged` is the dialect's answer to a chain that simply stops: it
+    /// says the item left this chain of accountability deliberately, rather
+    /// than the record being withheld. `acknowledges` points at the `Released`
+    /// it closes, so the pair can be checked instead of matched by guesswork.
+    ///
+    /// The dialect refuses a counterparty on `Discharged` — it is about the
+    /// item in one party's hands — so none is set.
+    pub fn discharge(
+        &self,
+        transfer: &Transfer,
+        released: ClaimId,
+    ) -> Result<SignedClaim, HandoverError> {
+        let body = Handoff::new(transfer.item_ref(), Event::Discharged)?.acknowledging(released);
+        Ok(self.cell.issue(&body)?)
+    }
+
+    /// Every handoff claim this cell has signed, oldest first.
+    ///
+    /// Claims in other dialects are skipped: a chain may hold checkpoints and
     /// endorsements this crate has no opinion about.
-    pub fn history(&self) -> Result<Vec<(u64, SignedClaim, HandoverClaim)>, HandoverError> {
+    pub fn history(&self) -> Result<Vec<Entry>, HandoverError> {
         let id = self.cell.id();
         let mut out = Vec::new();
         for (seq, signed) in self.cell.claims(&id)? {
-            if let Ok(body) = HandoverClaim::from_claim(&signed.claim) {
+            if let Ok(body) = Handoff::from_claim(&signed.claim) {
                 out.push((seq, signed, body));
             }
         }
@@ -145,15 +131,31 @@ impl Studio {
         Ok(out)
     }
 
-    /// The handover claims concerning one order.
-    pub fn history_for_order(
-        &self,
-        order_ref: u64,
-    ) -> Result<Vec<(u64, SignedClaim, HandoverClaim)>, HandoverError> {
+    /// The handoff claims concerning one customer.
+    pub fn history_for_customer(&self, customer_id: i64) -> Result<Vec<Entry>, HandoverError> {
+        let wanted = customer_ref(customer_id);
         Ok(self
             .history()?
             .into_iter()
-            .filter(|(_, _, body)| body.order_ref == order_ref)
+            .filter(|(_, _, body)| {
+                body.counterparty.as_deref() == Some(wanted.as_str())
+                    || body.event == Event::Discharged
+            })
             .collect())
     }
+}
+
+/// Which promised asset an item reference belongs to, if any.
+///
+/// The prefix is the studio's own convention, so reading it back is this
+/// crate's job rather than the dialect's.
+pub fn asset_of(item: &str) -> Option<Asset> {
+    Asset::ALL
+        .into_iter()
+        .find(|a| item.starts_with(&format!("{}:", a.prefix())))
+}
+
+/// The artefact identifier inside an item reference.
+pub fn identifier_of(item: &str) -> &str {
+    item.split_once(':').map_or(item, |(_, rest)| rest)
 }

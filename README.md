@@ -45,9 +45,9 @@ address never reaches a column, a log line or a backup.
 
 ## Handover claims
 
-`hemsidor24-handover` signs the delivery promises — proposal shown, proposal
-accepted, revision used, refund issued, ownership transferred — into an
-append-only Sijill chain, and renders a receipt from them.
+`hemsidor24-handover` signs the one promise that later gets disputed as a
+question of *fact* — that the domain, the hosting account and the source code
+are the customer's — into an append-only Sijill chain, and renders a receipt.
 
 It is **off by default and nothing else depends on it**:
 
@@ -55,9 +55,39 @@ It is **off by default and nothing else depends on it**:
 cargo run -p hemsidor24-handover --features handover --example receipt
 ```
 
-The protocol crates are pinned by revision rather than tag. A tag is a name its
-owner can move; a receipt is exactly the kind of document that has to rebuild to
-the same bytes years later, or be shown to have done so.
+### It defines no dialect of its own
+
+Ownership passing between parties is a custody event, and the protocol's
+first-party `sijill-dialect-handoff` already says what a custody event is. A
+private schema for it would be one company's word for something the domain
+already has a word for — dialects belong to a domain, not to a company. Each
+promised artefact becomes its own `Released` claim naming the customer as
+counterparty, because the three move separately; a `Discharged` claim closes
+the studio's accountability and names the `Released` it answers.
+
+### Signed, versus merely recorded
+
+The other four promises — proposal shown, proposal accepted, revision spent,
+refund issued — are **not** signed. They are commercial state, and they already
+live in Postgres under the back office's audit trail. Signing them would
+duplicate that and dress a one-sided assertion up as proof: a studio-signed
+"the customer accepted" is exactly the claim a customer would contest, and the
+signature adds nothing against them.
+
+The receipt therefore carries two tiers and labels every line: `studiojournal`
+for what the studio recorded, `signerat` for what was signed. The reader never
+meets the words dialect, chain or canonical encoding.
+
+### References
+
+The item is published deliberately — a domain is in WHOIS and the repository is
+on GitHub, and a claim saying only "an item was transferred" would be useless
+to the reader it is written for. The customer is not: they appear as `cus-42`,
+the `customers.id`, resolvable only through records the studio holds.
+
+The protocol crates are pinned by exact revision. Note that
+`sijill-dialect-handoff` landed after the `v0.3.0` baseline, so the pin is a
+main-line revision rather than a released tag — see *Known limits*.
 
 ### What a receipt is worth
 
@@ -83,15 +113,6 @@ Making it mutual would mean the customer holding a key and signing their own
 acceptance. That is a product decision, not a technical one: asking a
 small-business owner to manage a signing key is a real cost, and the promise of
 this product is that nothing about it is annoying.
-
-### Bodies carry references, not names
-
-Sijill's guidance is that a signed body should carry references the issuing cell
-can resolve locally, never names — a body naming a person names them for as long
-as the record exists. Customers appear as `order_ref`, never as a company name,
-email or phone number. The two exceptions are `domain` and `repo_url`, which are
-the *subject* of the promise and already public; a receipt saying only "a domain
-was transferred" would be useless to the reader it is written for.
 
 ## Known limits
 
@@ -127,6 +148,16 @@ collapses empty to `None`, and stores NULL. The columns were simply declared
 left the panel demanding a value for notes nobody had written. Migration 0004
 makes them nullable and the models use `Option<String>`. No framework change was
 needed.
+
+**The Sijill pin is a main-line revision, not a released tag.**
+`sijill-dialect-handoff` was added after `v0.3.0`, so `17dd4cf` is the earliest
+revision carrying it. Pinning by revision is reproducible — that is what the
+protocol's own README recommends for builds that must produce the same bytes
+years later — but it is not a baseline the protocol has blessed. The API this
+workspace uses is unchanged between `v0.3.0` and that revision: `sijill-dialect`
+is byte-identical, `sijill-core`'s only edit is a doc comment, and `sijill-cell`
+gained documentation and no public item. Moving to a tagged baseline is worth
+doing when the protocol cuts one.
 
 The one shape rustio-admin still cannot express is a `NOT NULL` text column that
 accepts the empty string — Django's `blank=True` without `null=True`. Nothing

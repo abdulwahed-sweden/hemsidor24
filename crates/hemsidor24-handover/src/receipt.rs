@@ -1,117 +1,148 @@
 //! The handover receipt.
 //!
-//! A plain-text rendering of what the studio signed about one order: what was
-//! promised, what was recorded, when, and by which key. Written to be handed to
-//! a lawyer, which means it has to say what it does *not* establish as plainly
-//! as what it does — a document that overstates itself is worse than none.
+//! One document, two kinds of evidence, and it says which is which on every
+//! line — because pretending they are the same strength would be the one
+//! dishonesty that matters here.
+//!
+//! **Studiojournal.** What the studio recorded as it worked: proposal shown,
+//! proposal accepted, revision spent, refund issued. These live in Postgres
+//! under the back office's audit trail. They are ordinary business records —
+//! good ones, attributable and timestamped, but held and editable by the
+//! studio.
+//!
+//! **Signerat.** Ownership actually passing. Signed into an append-only chain,
+//! tamper-evident, and checkable by someone who does not trust the studio's
+//! database. Only the promise most likely to be disputed as a matter of fact
+//! gets this treatment.
+//!
+//! The reader never meets the words dialect, cell, claim or content address.
+//! They meet a date, a thing, and a note saying how firmly it is established.
 
 use sijill_cell::format_timestamp;
-use sijill_core::SignedClaim;
 
-use crate::claim::{Event, HandoverClaim};
+use crate::studio::{Entry, asset_of, identifier_of};
 
-/// What this receipt cannot establish, in the words of the protocol's own
-/// limitations. Reproduced on every receipt so it cannot be separated from the
-/// claims it qualifies.
+/// Something the studio recorded while working, carried in from Postgres.
+///
+/// This crate does not talk to a database; the caller fills these from the
+/// `deliveries` and `sites` rows. That keeps the handover crate isolated, and
+/// keeps the receipt honest about where each line came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JournalEntry {
+    /// When it happened, as the studio recorded it.
+    pub when: String,
+    /// What happened, in the words the customer already knows.
+    pub what: String,
+    /// The promise it settles, if it settles one.
+    pub promise: Option<String>,
+}
+
+impl JournalEntry {
+    /// Record one studio-journal line.
+    pub fn new(when: impl Into<String>, what: impl Into<String>) -> Self {
+        JournalEntry {
+            when: when.into(),
+            what: what.into(),
+            promise: None,
+        }
+    }
+
+    /// Name the promise this line settles.
+    pub fn settling(mut self, promise: impl Into<String>) -> Self {
+        self.promise = Some(promise.into());
+        self
+    }
+}
+
+/// What the receipt cannot establish, in the protocol's own terms.
+///
+/// Printed on every receipt so it cannot be separated from the claims it
+/// qualifies.
 const CAVEATS_SV: &[&str] = &[
-    "Detta visar vad Hemsidor24 har undertecknat, och att texten inte har \
-     ändrats sedan dess. Det visar inte att innehållet är sant.",
-    "Kunden driver ingen egen cell och har inte undertecknat något här. \
-     Varje post ovan är Hemsidor24:s egen uppgift, inte ett ömsesidigt utbyte.",
+    "Rader märkta \"signerat\" är undertecknade av Hemsidor24 och kan inte \
+     ändras i efterhand utan att det syns. Det visar inte att innehållet är sant.",
+    "Rader märkta \"studiojournal\" kommer från Hemsidor24:s egen databas. \
+     De är daterade och spårbara, men de är inte undertecknade.",
+    "Kunden har inte undertecknat något här. Varje post är Hemsidor24:s egen \
+     uppgift, inte ett ömsesidigt utbyte.",
     "Tidpunkterna är angivna av Hemsidor24 själv och styrks inte av någon \
      utomstående.",
-    "Att nyckeln ovan tillhör Hemsidor24 är en bedömning läsaren gör; \
-     det framgår inte av dokumentet i sig.",
+    "Att nyckeln ovan tillhör Hemsidor24 är en bedömning läsaren gör; det \
+     framgår inte av dokumentet i sig.",
 ];
 
 /// Render the receipt for one order.
 ///
-/// `claims` should be that order's history, oldest first, as
-/// [`crate::Studio::history_for_order`] returns it.
-pub fn render(
-    cell_id: &str,
-    order_ref: u64,
-    claims: &[(u64, SignedClaim, HandoverClaim)],
-) -> String {
+/// `journal` is the studio's own record, oldest first. `signed` is the handoff
+/// history for that customer, as [`crate::Studio::history_for_customer`]
+/// returns it.
+pub fn render(cell_id: &str, order_id: i64, journal: &[JournalEntry], signed: &[Entry]) -> String {
     let mut out = String::new();
 
     out.push_str("ÖVERLÄMNINGSKVITTO\n");
     out.push_str("Hemsidor24\n\n");
-    out.push_str(&format!("Beställning:  #{order_ref}\n"));
-    out.push_str(&format!("Cell:         {cell_id}\n"));
-    out.push_str(&format!("Poster:       {}\n\n", claims.len()));
+    out.push_str(&format!("Beställning:  #{order_id}\n"));
+    out.push_str(&format!("Utfärdarens nyckel:  {cell_id}\n"));
+    out.push_str(
+        "Koderna nedan är till för att kontrollera dokumentet. Du behöver dem\n\
+         inte för något annat.\n\n",
+    );
 
-    if claims.is_empty() {
-        out.push_str("Inga undertecknade poster för denna beställning.\n\n");
-    } else {
-        out.push_str("HÄNDELSER\n\n");
-        for (seq, signed, body) in claims {
-            out.push_str(&format!("  [{seq}] {}\n", body.event.label_sv()));
-            out.push_str(&format!(
-                "       Tid (enligt Hemsidor24):  {}\n",
-                format_timestamp(signed.claim.timestamp_ms)
-            ));
-            out.push_str(&format!("       Post-id:                  {}\n", signed.id));
-            if body.site_ref != 0 {
-                out.push_str(&format!(
-                    "       Sida:                     #{}\n",
-                    body.site_ref
-                ));
-            }
-            match body.event {
-                Event::OwnershipTransferred => {
-                    if !body.domain.is_empty() {
-                        out.push_str(&format!(
-                            "       Domän:                    {}\n",
-                            body.domain
-                        ));
-                    }
-                    if !body.repo_url.is_empty() {
-                        out.push_str(&format!(
-                            "       Källkod:                  {}\n",
-                            body.repo_url
-                        ));
-                    }
-                }
-                Event::RevisionUsed => {
-                    out.push_str(&format!(
-                        "       Revidering nr:            {}\n",
-                        body.revision
-                    ));
-                }
-                Event::RefundIssued => {
-                    out.push_str(&format!(
-                        "       Belopp:                   {} kr\n",
-                        format_ore(body.refund_ore)
-                    ));
-                }
-                Event::DeliveryOffered | Event::DeliveryAccepted => {}
-            }
-            out.push_str(&format!(
-                "       Löfte:                    {}\n",
-                body.event.promise_sv()
-            ));
-            if !body.note.is_empty() {
-                out.push_str(&format!("       Notering:                 {}\n", body.note));
-            }
-            out.push('\n');
-        }
+    out.push_str("VAD SOM HÄNDE\n\n");
+    if journal.is_empty() {
+        out.push_str("  (inga journalposter)\n\n");
     }
+    for entry in journal {
+        out.push_str(&format!("  {:<26} {}\n", entry.what, entry.when));
+        out.push_str("       Underlag:  studiojournal\n");
+        if let Some(promise) = &entry.promise {
+            out.push_str(&format!("       Löfte:     {promise}\n"));
+        }
+        out.push('\n');
+    }
+
+    out.push_str("ÄGANDERÄTT\n\n");
+    if signed.is_empty() {
+        out.push_str("  Inget överlämnande är undertecknat för denna beställning.\n\n");
+    }
+    for (_, claim, body) in signed {
+        let what = match asset_of(&body.item) {
+            Some(asset) => asset.label_sv(),
+            None => "Överlämnat",
+        };
+        let verb = if body.event.to_string() == "discharged" {
+            "Ansvar avslutat"
+        } else {
+            "Överförd till kund"
+        };
+        out.push_str(&format!("  {what:<26} {verb}\n"));
+        out.push_str(&format!(
+            "       Avser:     {}\n",
+            identifier_of(&body.item)
+        ));
+        out.push_str(&format!(
+            "       Tid:       {}\n",
+            format_timestamp(claim.claim.timestamp_ms)
+        ));
+        out.push_str("       Underlag:  signerat\n");
+        out.push_str(&format!("       Verifieringskod: {}\n", claim.id));
+        if !body.note.is_empty() {
+            out.push_str(&format!("       Notering:  {}\n", body.note));
+        }
+        out.push('\n');
+    }
+
+    out.push_str("LÖFTET SOM DETTA AVSER\n\n");
+    out.push_str("  Domän och webbhotell i ditt namn. All kod på GitHub — du äger den.\n\n");
 
     out.push_str("VAD DETTA INTE VISAR\n\n");
     for caveat in CAVEATS_SV {
         out.push_str("  - ");
-        // Wrap so the document reads on paper.
         out.push_str(&wrap(caveat, 72, "    "));
         out.push('\n');
     }
 
     out
-}
-
-/// Öre as kronor, with two decimals and a comma, the Swedish way.
-fn format_ore(ore: u64) -> String {
-    format!("{},{:02}", ore / 100, ore % 100)
 }
 
 /// Wrap `text` to `width`, indenting continuation lines with `indent`.
@@ -138,33 +169,65 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ore_render_as_swedish_kronor() {
-        assert_eq!(format_ore(311_250), "3112,50");
-        assert_eq!(format_ore(561_250), "5612,50");
-        assert_eq!(format_ore(0), "0,00");
-        assert_eq!(format_ore(5), "0,05");
-    }
-
-    #[test]
-    fn an_empty_history_still_renders_a_document() {
-        let text = render("cell-abc", 42, &[]);
+    fn an_empty_receipt_still_says_what_is_missing() {
+        let text = render("cell-abc", 42, &[], &[]);
         assert!(text.contains("Beställning:  #42"));
-        assert!(text.contains("Inga undertecknade poster"));
+        assert!(text.contains("inga journalposter"));
+        assert!(text.contains("Inget överlämnande är undertecknat"));
     }
 
     #[test]
-    fn the_caveats_are_always_present() {
-        // They qualify the claims, so they must never be separable from them.
-        let text = render("cell-abc", 1, &[]);
-        assert!(text.contains("VAD DETTA INTE VISAR"));
-        assert!(text.contains("Det visar inte att innehållet är sant"));
-        assert!(text.contains("Kunden driver ingen egen cell"));
+    fn journal_lines_are_labelled_as_unsigned() {
+        let journal = vec![
+            JournalEntry::new("2026-09-04", "Förslag visat")
+                .settling("Du ser förslaget innan sidan publiceras."),
+        ];
+        let text = render("cell-abc", 1, &journal, &[]);
+        assert!(text.contains("Förslag visat"));
+        assert!(text.contains("Underlag:  studiojournal"));
+        assert!(text.contains("Du ser förslaget innan sidan publiceras."));
     }
 
     #[test]
-    fn wrapping_keeps_lines_readable_on_paper() {
-        let text = render("cell-abc", 1, &[]);
-        for line in text.lines() {
+    fn the_two_evidence_tiers_are_both_explained() {
+        let text = render("cell-abc", 1, &[], &[]);
+        assert!(text.contains("signerat"));
+        assert!(text.contains("studiojournal"));
+        assert!(text.contains("Kunden har inte undertecknat något här"));
+    }
+
+    #[test]
+    fn no_protocol_vocabulary_reaches_the_reader() {
+        // Canonical identifiers (`cell:…`, `claim:…`) DO appear: without them
+        // the document cannot be checked by anyone. What must not appear is
+        // the protocol's *concepts* — the reader is never asked to know what a
+        // dialect, a chain or a canonical encoding is. So this checks the
+        // words around the values, using a realistic identifier.
+        let journal = vec![JournalEntry::new("2026-09-04", "Förslag visat")];
+        let text = render(&format!("cell:{}", "ab".repeat(32)), 1, &journal, &[]).to_lowercase();
+        for word in [
+            "dialekt",
+            "dialect",
+            "kanonisk",
+            "encoder",
+            "content address",
+            "kedja",
+            "chain",
+        ] {
+            assert!(
+                !text.contains(word),
+                "receipt leaked protocol vocabulary: {word:?}"
+            );
+        }
+        // And the labels a reader actually reads are plain Swedish.
+        assert!(text.contains("utfärdarens nyckel"));
+        assert!(text.contains("verifieringskod") || text.contains("koderna"));
+    }
+
+    #[test]
+    fn lines_stay_readable_on_paper() {
+        let journal = vec![JournalEntry::new("2026-09-04", "Förslag godkänt")];
+        for line in render("cell-abc", 1, &journal, &[]).lines() {
             assert!(line.chars().count() <= 90, "line too long: {line:?}");
         }
     }
