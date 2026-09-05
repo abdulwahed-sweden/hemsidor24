@@ -18,3 +18,63 @@
     [data-m="actions"]{flex-direction:column;align-items:stretch !important;}
   }
   @keyframes drift{0%{transform:translate(0,0);}100%{transform:translate(-4%,3%);}}
+
+  /* ---------------------------------------------------------------------
+     Stage 1 repairs. Everything above this line is the original stylesheet,
+     unchanged.
+
+     Every declaration below carries !important for one reason: the markup
+     styles each element with an inline `style=""`, and an inline declaration
+     beats any selector. The @media block above already does this for the same
+     reason — this section follows that established pattern rather than
+     inventing a second one.
+
+     No colour, size or shadow here is new. Each value is the one the markup
+     already carried in a `style-hover` attribute, which the design runtime
+     used to apply and which nothing has applied since the site became static.
+     --------------------------------------------------------------------- */
+
+  /* Hover, keyed on data-h, parallel to the data-m markers used for layout
+     above. data-m says where an element sits; data-h says how it answers a
+     pointer. */
+  [data-h="link"]:hover{color:#1C4F9C !important;}
+  [data-h="cta"]:hover{background:#163F7E !important;transform:translateY(-1px) !important;box-shadow:0 1px 0 rgba(255,255,255,.2) inset,0 6px 16px -8px rgba(28,79,156,.5) !important;}
+  [data-h="cta-warm"]:hover{background:#E4762A !important;border-color:#E4762A !important;color:#fff !important;}
+  [data-h="lift"]:hover{transform:translateY(-2px) !important;box-shadow:0 1px 0 rgba(255,255,255,.25) inset,0 12px 24px -10px rgba(28,79,156,.5) !important;}
+  [data-h="lift-warm"]:hover{transform:translateY(-2px) !important;box-shadow:0 1px 0 rgba(255,255,255,.35) inset,0 12px 22px -12px rgba(228,118,42,.65) !important;}
+  [data-h="ghost"]:hover{border-color:#1C4F9C !important;background:#EDF2FA !important;}
+  [data-h="pick"]:hover{background:#1C4F9C !important;color:#fff !important;}
+  [data-h="warm"]:hover{background:#CF6720 !important;transform:translateY(-2px) !important;}
+  [data-h="tile"]:hover{transform:translateY(-3px) !important;box-shadow:0 16px 30px -24px rgba(28,79,156,.25) !important;border-color:rgba(28,79,156,.3) !important;}
+  [data-h="choice"]:hover{border-color:#1C4F9C !important;}
+  /* The step tiles are the one hover target the markup left without a
+     transition, so the lift would otherwise snap. Same timing as its siblings. */
+  [data-h="tile"]{transition:all .25s;}
+
+  /* The selected radio card.
+
+     The border and background of every choice are rendered inline from server
+     state, so before this rule the highlight could not move: clicking a
+     different style or package moved the native radio dot while the card stayed
+     lit on whatever the server drew — always the first option on a fresh load.
+     Selecting is the whole job of that part of the form.
+
+     Written with :has so the server-rendered value stays the correct default
+     when scripting is unavailable, and the live state takes over the moment a
+     pointer or a key changes it. More specific than the hover rule above, so a
+     selected card keeps its highlight while hovered. */
+  label[data-h="choice"]:has(input:checked){border-color:#1C4F9C !important;background:#EDF2FA !important;}
+
+  /* Focus. The stylesheet above gives inputs and textareas a focus ring but
+     leaves every link and button without one, so a keyboard user crossing the
+     page has nothing to follow. Same colour and weight as the input ring, and
+     :focus-visible so a mouse click does not leave a ring behind. */
+  a:focus-visible,button:focus-visible,label[data-h="choice"]:focus-within{outline:2px solid #1C4F9C;outline-offset:2px;}
+
+  /* Motion. The hero animates in and the page scrolls smoothly; both are
+     unconditional above. Anyone who has asked their system for less motion
+     should not have to watch either. */
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto !important;}
+    *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;}
+  }
