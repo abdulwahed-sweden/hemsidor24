@@ -29,3 +29,10 @@ reference/source.html
 # Local runtime data (throwaway Postgres clusters, logs, scratch output).
 *.log
 pgdata/
+
+# Sijill cell material. The cell lives outside the repository by design
+# (docs/sijill-cell-backup.md); this is defence in depth, because cell.key is
+# an unprotected signing seed and a single stray commit publishes it forever.
+cell.key
+log.sijill
+log.sijill.horizon
