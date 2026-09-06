@@ -161,6 +161,11 @@ creating one there would mint a new signing identity with an empty log, leaving
 every earlier claim orphaned. Set `HANDOVER_CELL_INIT=1` once, on purpose, to
 bring a new cell into existence; leave it unset everywhere else.
 
+Backups are two separate procedures and a full recovery needs both:
+`docs/postgres-backup.md` for the database, `docs/sijill-cell-backup.md` for the
+cell. Each has an operator script that restores its own backup and checks it
+came back intact.
+
 The cell is durability-critical and a Postgres backup does not cover it.
 `docs/sijill-cell-backup.md` is the operator note: what to back up, why a
 partial restore is worse than none, and the restore procedure, which is

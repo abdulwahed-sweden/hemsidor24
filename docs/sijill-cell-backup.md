@@ -83,7 +83,8 @@ does nothing for the copy you carry away.
 `HANDOVER_CELL_DIR` holds the studio's signing identity and its append-only
 chain of handoff claims.
 
-**A PostgreSQL backup does not back up the cell.** They are separate durability
+**A PostgreSQL backup does not back up the cell.** The database has its own
+procedure in [`postgres-backup.md`](postgres-backup.md); you need both. They are separate durability
 problems and need separate procedures:
 
 | | Postgres | Sijill cell |
