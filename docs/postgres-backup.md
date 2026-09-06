@@ -54,9 +54,45 @@ it did not create. Checks:
 
 Exits non-zero if any check fails.
 
+## Running it nightly
+
+```sh
+sed -e "s|__REPO__|$PWD|" -e "s|__HOME__|$HOME|" \
+    scripts/com.hemsidor24.backup.plist > ~/Library/LaunchAgents/com.hemsidor24.backup.plist
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.hemsidor24.backup.plist
+```
+
+A macOS user agent, 03:20 daily; launchd runs it on wake if the machine was
+asleep. Run it on demand with
+`launchctl kickstart gui/$UID/com.hemsidor24.backup`, and remove it with
+`launchctl bootout gui/$UID/com.hemsidor24.backup`.
+
+`scripts/scheduled-backup.sh` is the wrapper, and does three things the manual
+command does not:
+
+- **Prunes.** Keeps 14 days, and never drops below the newest 7 however old they
+  are — a laptop shut for a month must not wake up and delete its way to
+  nothing. It only ever removes files matching its own dump-name shape in its
+  own directory.
+- **Logs**, to `backup.log` beside the dumps. A job that fails quietly every
+  night for a month is worse than no job.
+- **Verifies each dump**, after writing it, never before. The dump is the thing
+  that must exist, so a verification failure cannot prevent one being taken —
+  the same order the application uses when it writes to Postgres before it tries
+  to send mail. `HEMSIDOR24_SKIP_VERIFY=1` turns it off, at the cost of nothing
+  checking that these files restore.
+
+Tune with `HEMSIDOR24_KEEP_DAYS`, `HEMSIDOR24_KEEP_MIN`, `HEMSIDOR24_BACKUP_DIR`.
+
+On a Linux host, schedule the same script with a systemd timer or cron instead;
+nothing in it is macOS-specific.
+
+**The cell is not on this schedule.** Its backup needs the back office stopped
+and external storage attached, so it stays a deliberate operator step.
+
 ## Before production
 
-- [ ] A backup schedule exists (this is a manual command; nothing runs it for you)
+- [x] A backup schedule exists (launchd, daily, verifying)
 - [ ] Backups are written to storage separate from the database host
 - [ ] A restore has been verified from the storage that will actually be used
 - [ ] The Sijill cell is backed up too — see the companion note

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Daily PostgreSQL backup for Hemsidor24 (macOS launchd user agent).
+
+  Install:
+    sed -e "s|__REPO__|$PWD|" -e "s|__HOME__|$HOME|" \
+        scripts/com.hemsidor24.backup.plist > ~/Library/LaunchAgents/com.hemsidor24.backup.plist
+    launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.hemsidor24.backup.plist
+
+  Remove:
+    launchctl bootout gui/$UID/com.hemsidor24.backup
+    rm ~/Library/LaunchAgents/com.hemsidor24.backup.plist
+
+  DATABASE_URL here holds no password: local Postgres trusts the socket. If the
+  database ever needs one, put it in ~/.pgpass (chmod 600) rather than in this
+  file — a plist is world-readable.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.hemsidor24.backup</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__REPO__/scripts/scheduled-backup.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>DATABASE_URL</key>
+        <string>postgres://postgres@localhost:5432/hemsidor24</string>
+        <key>PATH</key>
+        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    </dict>
+
+    <!-- 03:20 daily. If the machine was asleep, launchd runs it on wake. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key><integer>3</integer>
+        <key>Minute</key><integer>20</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Application Support/hemsidor24/backups/postgres/launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Application Support/hemsidor24/backups/postgres/launchd.err</string>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
