@@ -46,6 +46,38 @@ Before this cell signs a real handover:
 - [ ] A backup taken to separate physical storage
 - [ ] That off-machine backup restore-tested (procedure below)
 
+### Enabling FileVault
+
+Needs an administrator password and cannot be scripted from a tool session:
+
+```sh
+sudo fdesetup enable
+```
+
+Or System Settings → Privacy & Security → FileVault. Encryption runs in the
+background; the disk is protected once it completes.
+
+It prints a **recovery key**. Store it in a password manager or somewhere
+physically safe. Do not paste it into a terminal session, a chat, an issue or
+this repository — it unlocks the disk holding the signing seed.
+
+### Taking the off-machine backup
+
+Attach the external disk, stop the back office, then:
+
+```sh
+./scripts/backup-cell.sh /Volumes/<your disk>/hemsidor24-cell-backup
+```
+
+The script copies all three files, checks them byte-for-byte, reopens the copy
+in a scratch directory, and confirms the CellId and claim count match the
+original — because an untested backup is not a backup. It refuses a destination
+inside a cloud-synced folder, inside the repository, or in temporary storage,
+and refuses to run at all if the source is incomplete.
+
+Prefer an encrypted external volume. FileVault protects the internal disk; it
+does nothing for the copy you carry away.
+
 ## What this covers, and what it does not
 
 `HANDOVER_CELL_DIR` holds the studio's signing identity and its append-only
