@@ -24,27 +24,35 @@ deployment target is chosen, the cell moves there by *restore* — the procedure
 below, proven to preserve the CellId. Do not create a second cell on the new
 host; that would start an unrelated chain.
 
-## Not yet safe for real handovers
+## Accepted risk
 
-Two gaps on the machine holding this cell, both outside what the repository can
-fix:
+Two properties of the machine holding this cell, both decided against on
+2026-09-06 and recorded here so they are not raised again as open items:
 
-1. **FileVault is off.** `cell.key` is an unprotected signing seed sitting on an
-   unencrypted disk. Anyone with the file, or with the powered-off machine, can
-   sign as this cell.
+1. **FileVault is off.** `cell.key` is an unprotected signing seed on an
+   unencrypted disk. Anyone who obtains that file, or the powered-off machine,
+   can issue claims that verify as this cell.
 2. **No off-machine backup.** No Time Machine destination is configured. The
-   copy under `backups/` is on the same disk: it survives an accidental `rm` of
-   the cell directory and nothing else.
+   copy under `backups/` is on the same disk, so it survives an accidental
+   deletion of the cell directory and nothing else — not disk failure, not loss
+   of the machine.
 
-Until both are fixed, treat this cell as **staging**. It has signed nothing, so
-today it costs nothing to discard and recreate — which is exactly why this is
-the moment to fix them, and not after the first customer handover.
+**Signing may proceed on this basis.** These are accepted, not outstanding.
 
-Before this cell signs a real handover:
+What that costs, stated once so the decision is an informed one: a lost machine
+loses the identity, and the chain cannot be continued — claims already signed
+stay valid, but nothing new joins them, and a replacement key is a different
+cell. A copied `cell.key` lets someone else sign as the studio, and nothing in
+the chain would show it.
 
-- [ ] FileVault enabled on the machine holding it
-- [ ] A backup taken to separate physical storage
-- [ ] That off-machine backup restore-tested (procedure below)
+What it does not cost: the `handover` feature is off by default, so none of this
+touches ordinary operation, the Docker demo, or the database backups. Postgres
+has its own procedure and is unaffected — see
+[`postgres-backup.md`](postgres-backup.md).
+
+If either decision is revisited, the procedures are below and unchanged: the
+commands to enable FileVault, and `scripts/backup-cell.sh` for a verified
+off-machine copy.
 
 ### Enabling FileVault
 
@@ -147,13 +155,13 @@ Those tests prove a full round trip preserves the cell id, keeps every claim
 verifiable, and leaves a cell that can still extend its own chain — and that a
 half-restored directory does not announce itself.
 
-## Before production
+## Status
 
 - [x] A durable location for `HANDOVER_CELL_DIR` has been chosen
 - [x] The cell has been created deliberately and its CellId recorded
 - [x] A backup exists, taken with the application stopped (same disk only)
-- [ ] That backup is on **separate physical storage**
-- [ ] The backup is encrypted at rest (FileVault is currently off)
+- [—] Separate physical storage — accepted risk, see above
+- [—] Encrypted at rest — accepted risk, see above
 - [x] A restore has been performed into a clean directory
 - [x] The restored CellId matched
 
