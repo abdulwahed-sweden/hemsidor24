@@ -45,3 +45,28 @@ fn the_confirmation_is_the_servers_to_give() {
         "the confirmation text belongs inside the sent block, not outside it"
     );
 }
+
+/// The shipped routing source, checked the same way the markup is.
+///
+/// A unit test would need a request through the router, and that needs a tower
+/// `ServiceExt` this crate does not depend on. Reading the source is cruder but
+/// it guards the thing that actually broke, and adds no dependency for it.
+const ROUTES: &str = include_str!("../src/routes.rs");
+
+#[test]
+fn static_assets_are_revalidated_rather_than_assumed_fresh() {
+    // ServeDir sends only `last-modified`, and a browser given only that will
+    // cache heuristically and reuse the file without asking. A fixed main.js
+    // then does nothing for anyone still holding the broken one — which is how
+    // a repaired order form goes on swallowing clicks.
+    assert!(
+        ROUTES.contains("CACHE_CONTROL"),
+        "the static service must set Cache-Control, or a browser may keep \
+         serving an old main.js after the fix has shipped"
+    );
+    assert!(
+        ROUTES.contains("no-cache"),
+        "static assets must revalidate; `no-cache` still answers 304 when the \
+         file has not changed, so it costs almost nothing"
+    );
+}
