@@ -190,8 +190,7 @@ mod tests {
     use rustio_admin::{DateTime, ModelAdmin, Utc};
 
     async fn db() -> Option<Db> {
-        let url = std::env::var("TEST_DATABASE_URL").ok()?;
-        Db::connect(&url).await.ok()
+        crate::workflow::testdb::connect().await
     }
 
     async fn seed(db: &Db, company: &str, status: &str) -> i64 {

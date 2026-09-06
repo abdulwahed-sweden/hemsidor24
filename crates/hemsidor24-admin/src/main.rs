@@ -72,6 +72,27 @@ fn required(var: &'static str) -> Result<String, StartupError> {
 #[tokio::main]
 async fn main() -> Result<(), StartupError> {
     logging::init();
+
+    // An operator check, not a mode of the server: it sends one message through
+    // the configured notifier and exits. Placed before everything else so it
+    // needs no database and no cell — the point is to test mail, on a machine
+    // where mail may be the only thing configured yet.
+    if std::env::args().any(|a| a == "--send-test-mail") {
+        return match mail::send_test_message().await {
+            Ok(()) => {
+                println!("test message accepted by the SMTP server");
+                Ok(())
+            }
+            Err(reason) => {
+                eprintln!("test message was NOT sent: {reason}");
+                Err(StartupError::Invalid {
+                    var: "SMTP_HOST",
+                    reason: "the configured SMTP server did not accept a test message",
+                })
+            }
+        };
+    }
+
     mail::init();
     signing::init()?;
 

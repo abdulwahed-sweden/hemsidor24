@@ -543,7 +543,7 @@ mod orm_contract {
     /// could not be changed. Skips unless `TEST_DATABASE_URL` is set.
     #[tokio::test]
     async fn a_row_with_null_timestamps_can_be_updated() {
-        let Ok(url) = std::env::var("TEST_DATABASE_URL") else {
+        let Some(url) = crate::workflow::testdb::url() else {
             return;
         };
         let Ok(db) = Db::connect(&url).await else {

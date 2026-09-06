@@ -128,8 +128,62 @@ mod tests {
     /// database. They are here rather than in `tests/` because they exercise
     /// the persist-then-notify ordering, which is the one rule in this crate
     /// worth protecting from a well-meaning refactor.
+    /// The database these tests may use, or `None` to skip.
+    ///
+    /// Panics when `TEST_DATABASE_URL` names the same database as
+    /// `DATABASE_URL`. These tests insert orders and read them back; against
+    /// the development database they would leave test rows in real data while
+    /// reporting success. The same guard exists in `hemsidor24-admin`, kept
+    /// separate rather than shared because a test-support crate is more
+    /// workspace surface than twenty lines of string handling deserves.
+    fn test_url() -> Option<String> {
+        let test = std::env::var("TEST_DATABASE_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty())?;
+
+        if let Ok(dev) = std::env::var("DATABASE_URL")
+            && target(&test) == target(&dev)
+            && target(&test).is_some()
+        {
+            panic!(
+                "TEST_DATABASE_URL and DATABASE_URL both name {}. \
+                 These tests write, so running them would put test rows in \
+                 development data. Point TEST_DATABASE_URL at a dedicated \
+                 database, for example hemsidor24_test.",
+                target(&test).unwrap_or_default()
+            );
+        }
+        Some(test)
+    }
+
+    /// `host:port/database`, with the default port made explicit.
+    fn target(url: &str) -> Option<String> {
+        let rest = url.split_once("://")?.1;
+        let (authority, path) = rest.split_once('/')?;
+        let database = path.split(['?', '#']).next()?;
+        let hostport = authority.rsplit('@').next()?;
+        let (host, port) = match hostport.rsplit_once(':') {
+            Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => (h, p),
+            _ => (hostport, "5432"),
+        };
+        Some(format!("{host}:{port}/{database}"))
+    }
+
+    #[test]
+    fn the_guard_tells_a_dedicated_test_database_from_the_development_one() {
+        assert_eq!(
+            target("postgres://postgres@localhost/hemsidor24"),
+            target("postgres://postgres@localhost:5432/hemsidor24"),
+            "the default port must be made explicit before comparing"
+        );
+        assert_ne!(
+            target("postgres://postgres@localhost:5432/hemsidor24_test"),
+            target("postgres://postgres@localhost:5432/hemsidor24")
+        );
+    }
+
     async fn pool() -> Option<PgPool> {
-        let url = std::env::var("TEST_DATABASE_URL").ok()?;
+        let url = test_url()?;
         let pool = PgPoolOptions::new()
             .max_connections(2)
             .connect(&url)

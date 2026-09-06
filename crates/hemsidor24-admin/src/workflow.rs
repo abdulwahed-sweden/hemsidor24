@@ -134,3 +134,114 @@ async fn stamp_delivery(db: &Db, order_id: i64, column: &'static str) {
 /// one.
 #[cfg(test)]
 pub static DB_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Everything the database-backed tests need to reach Postgres safely.
+///
+/// The tests insert, update and truncate freely. Pointed at the development
+/// database they would destroy real work, and they would do it while reporting
+/// success — which is why the mismatch is a panic and not a skip.
+#[cfg(test)]
+pub mod testdb {
+    use rustio_admin::orm::Db;
+
+    /// The database the tests may use, or `None` when none is configured.
+    ///
+    /// Panics when `TEST_DATABASE_URL` names the same database as
+    /// `DATABASE_URL`. Skipping would be the gentler failure and the wrong
+    /// one: a developer who set both to the same value would get a green run
+    /// and a wrecked development dataset, and would have no reason to look.
+    pub fn url() -> Option<String> {
+        let test = std::env::var("TEST_DATABASE_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty())?;
+
+        if let Ok(dev) = std::env::var("DATABASE_URL")
+            && same_target(&test, &dev)
+        {
+            panic!(
+                "TEST_DATABASE_URL and DATABASE_URL both name {}. \
+                 These tests write and truncate, so running them would destroy \
+                 development data. Point TEST_DATABASE_URL at a dedicated \
+                 database, for example hemsidor24_test.",
+                target(&test).unwrap_or_else(|| "the same database".to_owned())
+            );
+        }
+        Some(test)
+    }
+
+    /// Connect to the test database, or `None` to skip.
+    pub async fn connect() -> Option<Db> {
+        Db::connect(&url()?).await.ok()
+    }
+
+    /// `host:port/database`, with the default port made explicit so that
+    /// `localhost/db` and `localhost:5432/db` compare equal.
+    fn target(url: &str) -> Option<String> {
+        let rest = url.split_once("://")?.1;
+        let (authority, path) = rest.split_once('/')?;
+        let database = path.split(['?', '#']).next()?;
+        let hostport = authority.rsplit('@').next()?;
+        // A bracketed IPv6 literal keeps its colons; only a trailing :port counts.
+        let (host, port) = match hostport.rsplit_once(':') {
+            Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => (h, p),
+            _ => (hostport, "5432"),
+        };
+        Some(format!("{host}:{port}/{database}"))
+    }
+
+    fn same_target(a: &str, b: &str) -> bool {
+        match (target(a), target(b)) {
+            (Some(a), Some(b)) => a == b,
+            _ => false,
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn the_default_port_is_made_explicit_before_comparing() {
+            assert!(same_target(
+                "postgres://postgres@localhost/hemsidor24",
+                "postgres://postgres@localhost:5432/hemsidor24"
+            ));
+        }
+
+        #[test]
+        fn credentials_do_not_change_which_database_is_named() {
+            assert!(same_target(
+                "postgres://alice:secret@db.example:5432/hemsidor24",
+                "postgres://bob@db.example:5432/hemsidor24"
+            ));
+        }
+
+        #[test]
+        fn a_dedicated_test_database_is_a_different_target() {
+            assert!(!same_target(
+                "postgres://postgres@localhost:5432/hemsidor24_test",
+                "postgres://postgres@localhost:5432/hemsidor24"
+            ));
+        }
+
+        #[test]
+        fn query_parameters_are_not_part_of_the_name() {
+            assert!(same_target(
+                "postgres://postgres@localhost/hemsidor24?sslmode=require",
+                "postgres://postgres@localhost:5432/hemsidor24"
+            ));
+        }
+
+        #[test]
+        fn a_different_host_or_port_is_a_different_target() {
+            assert!(!same_target(
+                "postgres://postgres@localhost:5433/hemsidor24",
+                "postgres://postgres@localhost:5432/hemsidor24"
+            ));
+            assert!(!same_target(
+                "postgres://postgres@other.host/hemsidor24",
+                "postgres://postgres@localhost/hemsidor24"
+            ));
+        }
+    }
+}

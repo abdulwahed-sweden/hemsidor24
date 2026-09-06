@@ -161,6 +161,11 @@ creating one there would mint a new signing identity with an empty log, leaving
 every earlier claim orphaned. Set `HANDOVER_CELL_INIT=1` once, on purpose, to
 bring a new cell into existence; leave it unset everywhere else.
 
+The cell is durability-critical and a Postgres backup does not cover it.
+`docs/sijill-cell-backup.md` is the operator note: what to back up, why a
+partial restore is worse than none, and the restore procedure, which is
+exercised by `--test backup_restore`.
+
 A cell directory takes **one holder at a time**. Run a single back-office
 instance against it, and deploy stop-then-start rather than rolling — two
 overlapping processes cannot both sign, and the loser records nothing.
@@ -256,6 +261,28 @@ After changing a query or a migration, regenerate it:
 
 ```sh
 DATABASE_URL=postgres://... cargo sqlx prepare --workspace -- --all-targets
+```
+
+Mail settings are never proved by starting the server: the SMTP transport is
+built lazily, so a wrong password or an unreachable host looks identical to a
+working configuration until a customer's confirmation fails to arrive. Force the
+question:
+
+```sh
+./target/debug/hemsidor24-admin --send-test-mail
+```
+
+It sends one clearly marked message to `NOTIFY_TO` through the same notifier the
+application uses, touches no database and no cell, and exits non-zero if the
+server did not accept it.
+
+The database-backed tests need their **own** database. `TEST_DATABASE_URL` must
+not name the same one as `DATABASE_URL`; the tests write and truncate, so the
+suite panics rather than run if they match:
+
+```sh
+createdb hemsidor24_test
+DATABASE_URL=postgres://postgres@localhost/hemsidor24_test cargo sqlx migrate run
 ```
 
 The database-backed tests skip unless `TEST_DATABASE_URL` is set:

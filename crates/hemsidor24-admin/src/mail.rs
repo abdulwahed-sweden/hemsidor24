@@ -15,6 +15,47 @@ use std::sync::OnceLock;
 
 use hemsidor24_notify::{FakeNotifier, Message, Notifier, SmtpConfig, SmtpNotifier};
 
+/// Send one operational test message and report whether it actually left.
+///
+/// The one thing the ordinary startup path cannot tell an operator.
+/// `SmtpNotifier::connect` only builds a transport — it opens no socket and
+/// never authenticates — so a wrong password or an unreachable host looks
+/// exactly like a correct configuration until the first real customer order
+/// fails to confirm. This forces that discovery to happen on purpose.
+///
+/// Reads the same five variables the application does and sends through the
+/// same notifier, because a check against a different configuration would
+/// prove nothing about the one that runs.
+///
+/// Sends nothing anywhere but `NOTIFY_TO`, the studio's own address, and
+/// changes no application state.
+pub async fn send_test_message() -> Result<(), String> {
+    init();
+    let mail = get().ok_or("mail was not initialised")?;
+    let Some(notifier) = &mail.notifier else {
+        return Err("SMTP is not configured — set SMTP_HOST, SMTP_USER, \
+                    SMTP_PASSWORD, NOTIFY_TO and NOTIFY_FROM"
+            .to_owned());
+    };
+
+    let message = Message {
+        to: mail.studio.clone(),
+        from: mail.from.clone(),
+        reply_to: Some(mail.studio.clone()),
+        subject: "Hemsidor24 — testutskick".to_owned(),
+        body: "Detta är ett testmeddelande från Hemsidor24:s backoffice.\n\
+               \n\
+               Det skickades avsiktligt för att kontrollera att e-post fungerar.\n\
+               Ingen beställning och ingen kund berörs.\n"
+            .to_owned(),
+    };
+
+    notifier
+        .send(&message)
+        .await
+        .map_err(|error| format!("{error}"))
+}
+
 /// Built once at startup by [`init`].
 static MAIL: OnceLock<Mail> = OnceLock::new();
 
