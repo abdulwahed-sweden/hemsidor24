@@ -101,6 +101,31 @@ impl Notifier for FakeNotifier {
         if self.fail {
             return Err(NotifyError::Simulated);
         }
+        // Print the whole message, not a summary of it.
+        //
+        // This is the no-SMTP path and nothing else: when SMTP is configured,
+        // SmtpNotifier does the sending and this type is never reached. So the
+        // only reader of this output is somebody running without a mail server
+        // — locally, or a studio whose settings are missing — and for them a
+        // subject line alone answers none of the questions they have. What did
+        // the customer actually receive, and does it read correctly in Swedish?
+        tracing::info!(
+            "NO SMTP — message not sent, printed instead:\n\
+             ----------------------------------------------------------------\n\
+             To:      {}\n\
+             From:    {}\n\
+             ReplyTo: {}\n\
+             Subject: {}\n\
+             \n\
+             {}\
+             ----------------------------------------------------------------",
+            message.to,
+            message.from,
+            message.reply_to.as_deref().unwrap_or("—"),
+            message.subject,
+            message.body,
+        );
+
         if let Ok(mut sent) = self.sent.lock() {
             sent.push(message.clone());
         }

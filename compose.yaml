@@ -1,0 +1,67 @@
+# Local demo for Hemsidor24. Two services, one command, a browser.
+#
+#   docker compose up --build     start
+#   docker compose down           stop, keeping the demo data
+#   docker compose down -v        stop and delete the demo database
+#
+# Everything here is isolated from the developer's machine: its own project
+# name, its own named volume, its own database, and no host port on Postgres.
+# It cannot reach the local hemsidor24 or hemsidor24_test databases, the Sijill
+# cell, or the scheduled backups.
+#
+# The credentials below are LOCAL DEMO ONLY and are deliberately in the file so
+# the demo needs no setup. Never use them anywhere real.
+name: hemsidor24-demo
+
+services:
+  hemsidor24-database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hemsidor24_demo
+      POSTGRES_USER: hemsidor24
+      POSTGRES_PASSWORD: demo-only-local
+    volumes:
+      - hemsidor24-demo-data:/var/lib/postgresql/data
+    # No host port on purpose: nothing outside this compose project needs it,
+    # and publishing one risks confusion with the real Postgres on 5432.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hemsidor24 -d hemsidor24_demo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  hemsidor24-app:
+    build: .
+    depends_on:
+      hemsidor24-database:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://hemsidor24:demo-only-local@hemsidor24-database:5432/hemsidor24_demo
+      IP_HASH_SALT: demo-only-local-salt
+
+      BIND_ADDR: 0.0.0.0
+      PORT: 3000
+      ADMIN_BIND_ADDR: 0.0.0.0
+      ADMIN_PORT: 3001
+
+      # The back office creates this administrator on first start.
+      ADMIN_EMAIL: demo@hemsidor24.local
+      ADMIN_PASSWORD: demo-only-local
+
+      RUST_LOG: info
+      ADMIN_LOG: info
+
+      # No SMTP_* on purpose. Without it the application falls back to printing
+      # each outgoing message in full, which is what makes the demo readable.
+    ports:
+      - "8080:3000"
+      - "8081:3001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/health && curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/admin/login/ | grep -q 200"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+volumes:
+  hemsidor24-demo-data:

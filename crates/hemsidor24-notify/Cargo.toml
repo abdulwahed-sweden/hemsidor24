@@ -13,4 +13,7 @@ lettre = { version = "0.11", default-features = false, features = [
     "builder", "smtp-transport", "tokio1-rustls-tls", "rustls-platform-verifier",
 ] }
 thiserror.workspace = true
-tracing = "0.1"
+# The "log" feature matters: the back office logs through the `log` facade and
+# sets no tracing subscriber, so without it these events would be invisible in
+# exactly the binary that sends most of the customer mail.
+tracing = { version = "0.1", features = ["log"] }

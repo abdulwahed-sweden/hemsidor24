@@ -1,0 +1,9 @@
+target
+.git
+.github
+reference
+docs
+scripts
+*.md
+.env
+.sqlx/.gitignore
