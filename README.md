@@ -133,6 +133,38 @@ released upstream as `v0.4.0`. The revision is what Cargo resolves and what
 makes the build reproducible; the tag is the human-readable name for the same
 commit.
 
+### Operating procedure
+
+Publication records Hemsidor24's assertion that it released control of each
+artefact included in the handoff. The real-world transfer happens at the
+registrar, the hosting provider, GitHub or whichever external system holds the
+artefact. Sijill does not perform that transfer and does not independently
+verify it.
+
+Complete the real transfer first, then run **Publicera och lämna över** — never
+the other way round. A `Released` claim signed beforehand asserts a release that
+had not happened at the moment it was signed, and an append-only chain offers no
+way to take that back.
+
+### Configuration is mandatory when the feature is on
+
+A binary built with `--features handover` is a deployment that signs its
+handovers, so the back office refuses to start unless it can actually sign:
+`HANDOVER_CELL_DIR` must be set, must hold a cell that opens, and must be
+writable. Starting anyway would mean publication looked successful while
+producing no claim at all, and the operator would find out only when they went
+looking for a record that was never made.
+
+Creating a cell is deliberate and separate. An empty directory is **not** a
+valid cell: it is what a redeploy onto a fresh volume looks like, and quietly
+creating one there would mint a new signing identity with an empty log, leaving
+every earlier claim orphaned. Set `HANDOVER_CELL_INIT=1` once, on purpose, to
+bring a new cell into existence; leave it unset everywhere else.
+
+A cell directory takes **one holder at a time**. Run a single back-office
+instance against it, and deploy stop-then-start rather than rolling — two
+overlapping processes cannot both sign, and the loser records nothing.
+
 ### What a receipt is worth
 
 **This is single-sided provenance, not a mutual exchange.** Sijill is built for

@@ -87,32 +87,77 @@ mod enabled {
         cell_dir().is_some()
     }
 
-    /// Report at startup whether signing is configured, and open the cell once
-    /// so a broken one is found now rather than mid-handover.
+    /// Set once, deliberately, to bring a brand-new cell into existence.
     ///
-    /// Absent means publishing still works and simply signs nothing, logged
-    /// loudly — the same policy as mail. A cell that cannot be opened must not
-    /// stop the studio recording that a site went live.
-    pub fn init() {
-        let dir = cell_dir().cloned();
+    /// Creating a cell is not something that should ever happen by accident.
+    /// A cell that is created rather than opened has a **new signing identity
+    /// and an empty log**, so every claim the studio signed before it is
+    /// orphaned: still valid, but no longer part of the chain this cell will
+    /// extend. Requiring an explicit variable means that can only happen when
+    /// somebody asked for it.
+    const INIT_VAR: &str = "HANDOVER_CELL_INIT";
 
-        match &dir {
-            Some(path) => match Studio::open(path).or_else(|_| Studio::create(path)) {
-                Ok(studio) => log::info!(
-                    "handover cell ready at {}, id {}",
-                    path.display(),
-                    studio.cell().id()
-                ),
-                Err(error) => log::error!(
-                    "handover cell at {} could not be opened: {error} — publishing will not sign",
-                    path.display()
-                ),
-            },
-            None => log::warn!(
-                "HANDOVER_CELL_DIR is not set — publishing will record the handover \
-                 in Postgres but sign nothing"
-            ),
-        }
+    /// Decide whether signing can work, or why the process must not start.
+    ///
+    /// Split out from [`init`] so the outcomes can be tested without touching
+    /// process-wide environment or the `OnceLock` behind [`cell_dir`].
+    fn check(
+        dir: Option<&std::path::Path>,
+        may_create: bool,
+    ) -> Result<Studio, crate::StartupError> {
+        let Some(path) = dir else {
+            return Err(crate::StartupError::Missing("HANDOVER_CELL_DIR"));
+        };
+
+        let studio = match Studio::open(path) {
+            Ok(studio) => studio,
+            // Nothing openable there. Creating one silently is exactly the
+            // failure this guards: a redeploy onto an empty volume would mint
+            // a fresh identity, sign with it, and report success.
+            Err(_) if !may_create => {
+                return Err(crate::StartupError::Invalid {
+                    var: "HANDOVER_CELL_DIR",
+                    reason: concat!(
+                        "holds no cell that could be opened. Restore the cell ",
+                        "directory from backup, or set HANDOVER_CELL_INIT=1 once ",
+                        "to create a new cell with a new signing identity."
+                    ),
+                });
+            }
+            Err(_) => Studio::create(path).map_err(|_| crate::StartupError::Invalid {
+                var: "HANDOVER_CELL_DIR",
+                reason: "no cell could be created there",
+            })?,
+        };
+
+        // Opening proves the key can be read. Signing also appends to the log,
+        // so a directory mounted read-only would open here and fail at the one
+        // moment that matters.
+        let probe = path.join(".hemsidor24-write-probe");
+        std::fs::write(&probe, b"").map_err(|_| crate::StartupError::Invalid {
+            var: "HANDOVER_CELL_DIR",
+            reason: "is not writable, so claims could be signed but never recorded",
+        })?;
+        let _ = std::fs::remove_file(&probe);
+
+        Ok(studio)
+    }
+
+    /// Prove signing works before the process serves anything.
+    ///
+    /// Compiling the feature in is a statement that this deployment signs its
+    /// handovers. Starting anyway with signing broken would mean publishing
+    /// looked successful while producing no record at all — the operator would
+    /// find out when they went looking for a claim that was never made. So
+    /// this is fatal, not a warning.
+    pub fn init() -> Result<(), crate::StartupError> {
+        let may_create = std::env::var(INIT_VAR).is_ok_and(|v| !v.trim().is_empty());
+        let studio = check(cell_dir().map(std::path::PathBuf::as_path), may_create)?;
+        log::info!(
+            "handover cell ready, id {} — signing is active",
+            studio.cell().id()
+        );
+        Ok(())
     }
 
     /// Sign one `Released` claim per named artefact.
@@ -126,7 +171,10 @@ mod enabled {
             return Signed::default();
         };
 
-        let studio = match Studio::open(dir).or_else(|_| Studio::create(dir)) {
+        // Open only. Startup already proved this works, so a failure here is a
+        // real anomaly — and creating a replacement would hide it behind a new
+        // identity rather than surface it.
+        let studio = match Studio::open(dir) {
             Ok(s) => s,
             Err(error) => {
                 log::error!("handover cell could not be opened: {error}");
@@ -178,14 +226,151 @@ mod enabled {
             }
         }
     }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// A directory that removes itself, so a failed test leaves no cell
+        /// lying around with a real signing key in it.
+        struct TempDir(std::path::PathBuf);
+
+        impl TempDir {
+            fn new(tag: &str) -> Self {
+                let mut path = std::env::temp_dir();
+                path.push(format!("hemsidor24-cell-{tag}-{}", std::process::id()));
+                let _ = std::fs::remove_dir_all(&path);
+                std::fs::create_dir_all(&path).expect("temp dir");
+                TempDir(path)
+            }
+        }
+
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+
+        #[test]
+        fn a_cell_directory_takes_one_holder_at_a_time() {
+            // Not a rule this code imposes — it is how the cell behaves, and it
+            // decides how the back office may be deployed. Two admin processes
+            // pointed at one cell directory cannot both sign, so a rolling
+            // restart that overlaps the old and new process will leave one
+            // publication unsigned. Deploy this stop-then-start, one instance.
+            let dir = TempDir::new("single");
+            let held = Studio::create(&dir.0).expect("created");
+            assert!(
+                Studio::open(&dir.0).is_err(),
+                "a second holder must not get the same cell"
+            );
+            drop(held);
+            assert!(
+                Studio::open(&dir.0).is_ok(),
+                "and it is available again once released"
+            );
+        }
+
+        #[test]
+        fn startup_fails_when_no_cell_directory_is_configured() {
+            let Err(error) = check(None, false) else {
+                panic!("must not start with no cell directory")
+            };
+            assert!(
+                matches!(error, crate::StartupError::Missing("HANDOVER_CELL_DIR")),
+                "{error}"
+            );
+        }
+
+        #[test]
+        fn startup_fails_when_the_directory_holds_no_cell() {
+            // The redeploy-onto-an-empty-volume case. Before this was fatal it
+            // minted a new identity, signed with it, and logged INFO.
+            let dir = TempDir::new("empty");
+            let Err(error) = check(Some(&dir.0), false) else {
+                panic!("must not start on a directory holding no cell")
+            };
+            assert!(
+                matches!(
+                    error,
+                    crate::StartupError::Invalid {
+                        var: "HANDOVER_CELL_DIR",
+                        ..
+                    }
+                ),
+                "{error}"
+            );
+        }
+
+        #[test]
+        fn startup_fails_when_the_path_is_not_a_usable_directory() {
+            let dir = TempDir::new("notadir");
+            let file = dir.0.join("cell-that-is-a-file");
+            std::fs::write(&file, b"not a cell").expect("write");
+            let Err(error) = check(Some(&file), false) else {
+                panic!("must not start on a path that is not a cell directory")
+            };
+            assert!(
+                matches!(
+                    error,
+                    crate::StartupError::Invalid {
+                        var: "HANDOVER_CELL_DIR",
+                        ..
+                    }
+                ),
+                "{error}"
+            );
+        }
+
+        #[test]
+        fn startup_succeeds_on_a_cell_that_already_exists() {
+            let dir = TempDir::new("valid");
+            let created = Studio::create(&dir.0).expect("cell created");
+            let expected = created.cell().id().to_string();
+            drop(created);
+
+            let studio = check(Some(&dir.0), false).expect("starts");
+            assert_eq!(
+                studio.cell().id().to_string(),
+                expected,
+                "startup opens the existing cell rather than replacing it"
+            );
+        }
+
+        #[test]
+        fn an_empty_directory_is_only_turned_into_a_cell_when_asked() {
+            let dir = TempDir::new("optin");
+            assert!(
+                check(Some(&dir.0), false).is_err(),
+                "refuses to create without the opt-in"
+            );
+            assert!(
+                !dir.0.join("cell.key").exists(),
+                "a refused start leaves no key behind"
+            );
+
+            let studio = check(Some(&dir.0), true).expect("creates when asked");
+            assert!(dir.0.join("cell.key").exists());
+            let created = studio.cell().id().to_string();
+            // A cell directory takes one handle at a time, so release this one
+            // before asking for another. See the test below.
+            drop(studio);
+
+            // And having created one, an ordinary start must now open that
+            // same cell rather than make another.
+            let reopened = check(Some(&dir.0), false).expect("opens what it made");
+            assert_eq!(created, reopened.cell().id().to_string());
+        }
+    }
 }
 
 #[cfg(not(feature = "handover"))]
 mod enabled {
     use super::{Artefacts, Signed};
 
-    /// Nothing to set up when the feature is off.
-    pub fn init() {}
+    /// Nothing to set up when the feature is off, and nothing that can fail.
+    pub fn init() -> Result<(), crate::StartupError> {
+        Ok(())
+    }
 
     /// Never configured: without the feature there is nothing to sign with.
     #[cfg(test)]

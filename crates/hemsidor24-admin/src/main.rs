@@ -73,7 +73,7 @@ fn required(var: &'static str) -> Result<String, StartupError> {
 async fn main() -> Result<(), StartupError> {
     logging::init();
     mail::init();
-    signing::init();
+    signing::init()?;
 
     let database_url = required("DATABASE_URL")?;
 
