@@ -4,8 +4,10 @@ Fixed-price one-page websites for small businesses in Sweden.
 Start 2 490 kr, Pro 4 490 kr. No subscription.
 
 This repository is the studio: the public page, the order intake, and the back
-office behind it. It is being rebuilt from a single static `index.html` into a
-Rust workspace, one reviewable phase at a time.
+office behind it. It was rebuilt from a single static `index.html` into a
+Rust workspace, one reviewable phase at a time. All five phases are done, and an
+order can now be taken from the form to a published, handed-over site without
+anyone editing the database by hand.
 
 ## Workspace layout
 
@@ -15,7 +17,7 @@ Rust workspace, one reviewable phase at a time.
 | `hemsidor24-web` | Axum. Serves the public page, accepts the order form. Server-rendered HTML. | Phase 3 — done |
 | `hemsidor24-notify` | Outbound email only. Trait-based so it can be faked in tests. | Phase 3 — done |
 | `hemsidor24-admin` | Back office over Postgres. Not visible to customers. | Phase 4 — done |
-| `hemsidor24-handover` | Sijill delivery claims. Feature-gated, off by default. | Phase 5 — done, undecided |
+| `hemsidor24-handover` | Sijill delivery claims. Feature-gated, off by default. | Phase 5 — done |
 
 The dependency arrows point one way. `core` depends on nothing in this
 workspace; everything else may depend on `core`; nothing at all may depend on
@@ -26,6 +28,8 @@ here — that belongs to the per-customer PRO sites, which are a different
 product in a different repository.
 
 ## How an order is handled
+
+### Intake
 
 `POST /bestall` does three things in a fixed order, and the order is the design:
 
@@ -42,6 +46,45 @@ emailed is gone the moment the inbox is tidied. Hence the order.
 
 The stored IP is `sha256(ip || IP_HASH_SALT)`, computed by Postgres. The raw
 address never reaches a column, a log line or a backup.
+
+### The studio side
+
+The back office turns a stored order into a delivered site through six actions on
+the order list. Each is a bulk action, so a studio can select several rows and run
+the same step on all of them.
+
+The status machine lives in `hemsidor24-core`, not in the actions:
+
+```
+Ny ──▶ Utkast skickat ──▶ Godkänd ──▶ Publicerad
+ │            │              │
+ └────────────┴──────────────┴──▶ Avbruten
+```
+
+`Publicerad` and `Avbruten` are terminal. That is why a published site cannot be
+called off: the guarantee runs until publication — *"Garantin gäller fram till
+publicering"* — and the rule is enforced once, by the type, rather than restated
+by every action that needs it.
+
+| Action | What it does |
+| --- | --- |
+| **Skapa kund och uppdrag** | Creates the customer, site and delivery rows from the order and links them. Not a status change: an order becomes a job before anything is sent. |
+| **Skicka utkast till kund** | → `Utkast skickat`. Stamps `offered_at` and tells the customer the proposal is ready. |
+| **Registrera godkännande** | → `Godkänd`. Stamps `accepted_at`. The studio recording the customer's approval — not the customer asserting it. |
+| **Publicera och lämna över** | → `Publicerad`. Requires `live_url`. Stamps the site and sets each transfer flag to match what was actually signed, never what was intended. |
+| **Avbryt beställning** | → `Avbruten`. Marks no moment on the delivery: a delivery records what was handed over, and a called-off order never got there. |
+| **Registrera återbetalning** | Stamps `refunded_at`. Requires the order to be cancelled and a `refund_reason` written first, and refuses a row already refunded. The amount comes from the package, never typed. |
+
+The five that write to a customer write Postgres first and mail second, for the
+reason intake does. *Skapa kund och uppdrag* tells nobody anything — turning an
+order into a job is studio bookkeeping, and the customer has no reason to hear
+about it. A refusal sends nothing at all either way, so nobody is ever told about
+a step that did not happen.
+
+The six are declared and dispatched from a single list, which is what stops a
+button existing with no code behind it. That is not hypothetical: the two were
+once separate and drifted, and the publish button spent a while redirecting,
+logging nothing and changing nothing while looking like it worked.
 
 ## Handover claims
 
@@ -117,7 +160,7 @@ this product is that nothing about it is annoying.
 
 ## Known limits
 
-The back office is `rustio-admin` 0.33.0.
+The back office is `rustio-admin` 0.33.1.
 
 **Fixed upstream, in 0.33.1.** 0.33.0 bound every `Value::Null` as `None::<i64>`,
 so any row holding NULL in a nullable non-`bigint` column could not be updated —
@@ -183,7 +226,7 @@ After changing a query or a migration, regenerate it:
 DATABASE_URL=postgres://... cargo sqlx prepare --workspace -- --all-targets
 ```
 
-The four database-backed tests skip unless `TEST_DATABASE_URL` is set:
+The database-backed tests skip unless `TEST_DATABASE_URL` is set:
 
 ```sh
 TEST_DATABASE_URL=postgres://postgres@localhost/hemsidor24_test cargo test
@@ -201,7 +244,10 @@ nothing in the build reads from it at runtime.
 - [x] **Phase 2** — Axum serving the page from Askama templates
 - [x] **Phase 3** — the order form: validation, Postgres, email
 - [x] **Phase 4** — back office (see *Known limits*)
-- [x] **Phase 5** — Sijill handover claims (see *Handover claims*; may be removed)
+- [x] **Phase 5** — Sijill handover claims (see *Handover claims*)
 
-The design pass comes last, after the phases above. No colours, typography or
-copy have been changed.
+The design pass ran after the phases above and then stopped. Two stages landed —
+seven pre-existing defects repaired, and the repeated inline styles lifted out of
+the markup — and neither changed a colour, a typeface, a price or a word of copy.
+Further visual work is deliberately on hold: the page is good enough, and it is
+worth reopening only when something is actually broken or blocks a customer.
