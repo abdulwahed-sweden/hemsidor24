@@ -9,6 +9,43 @@ Rust workspace, one reviewable phase at a time. All five phases are done, and an
 order can now be taken from the form to a published, handed-over site without
 anyone editing the database by hand.
 
+## Seeing it run
+
+Two containers, one command, a browser. Default build — no Sijill, nothing
+signed.
+
+```sh
+docker compose up --build      # start
+docker compose down            # stop, keeping the demo data
+docker compose down -v         # stop and empty the demo database
+```
+
+| | |
+| --- | --- |
+| Public site | <http://localhost:8080> |
+| Back office | <http://localhost:8081/admin/> |
+| Sign in | `demo@hemsidor24.local` / `demo-only-local` |
+
+Those credentials are **local demo only** and are committed on purpose so the
+demo needs no setup. Never use them anywhere real.
+
+The demo has its own database (`hemsidor24_demo`), its own volume and its own
+compose project, and publishes no Postgres port. It cannot reach a developer's
+`hemsidor24` or `hemsidor24_test`, the Sijill cell, or the backups. `down -v`
+deletes that one volume and nothing else.
+
+No SMTP is configured, deliberately: without it every outgoing message is
+printed in full — recipient, subject and body — so the whole customer
+conversation is readable in the log.
+
+```sh
+docker compose logs -f hemsidor24-app
+```
+
+Submit an order on the public site, then work it through the back office:
+*Skapa kund och uppdrag* → *Skicka utkast till kund* → *Registrera godkännande*
+→ fill `live_url` on the site → *Publicera och lämna över*.
+
 ## Workspace layout
 
 | Crate | Job | Status |
@@ -43,6 +80,11 @@ product in a different repository.
 
 An order that reached Postgres survives any mail outage. An order that was only
 emailed is gone the moment the inbox is tidied. Hence the order.
+
+With no SMTP configured, mail is not silently dropped: the whole message is
+printed instead, recipient and subject and body. That path is only ever reached
+when SMTP is absent, and it is the difference between a studio that can read
+what its customer received and one that cannot.
 
 The stored IP is `sha256(ip || IP_HASH_SALT)`, computed by Postgres. The raw
 address never reaches a column, a log line or a backup.
@@ -239,6 +281,24 @@ The one shape rustio-admin still cannot express is a `NOT NULL` text column that
 accepts the empty string — Django's `blank=True` without `null=True`. Nothing
 here needs it, and it is not worth an attribute until something does.
 
+## The order form submits itself
+
+`<form method="post" action="/bestall">` and nothing else. No script may
+intercept it.
+
+This is written down because it was once not true. A pre-Phase-3 script
+cancelled the form's submit event and stood in for a server that could not yet
+accept orders; when Phase 3 built `/bestall`, the script stayed. Every click in
+a real browser was swallowed — no request, no order, no error — while the tests
+stayed green, because they posted to the route directly and never loaded the
+page.
+
+Two tests guard the two halves, and neither implies the other. `static_js.rs`
+holds that no script cancels the submit; `order_form_template.rs` holds that the
+markup carries the `method` and `action` that make the submission, and that the
+confirmation stays inside `{% if sent %}`. A customer must never read *"Tack"*
+before the row is written.
+
 ## The rules the code enforces
 
 The sales copy makes promises out loud, and `hemsidor24-core::scope` is where
@@ -301,6 +361,28 @@ for local settings; `BIND_ADDR` and `PORT` both have defaults.
 
 `reference/` holds the original design export. It is input material only —
 nothing in the build reads from it at runtime.
+
+## Backups
+
+Two separate procedures, and a full recovery needs both. Postgres holds the
+commercial state; the Sijill cell holds a signing identity that cannot be
+regenerated. Neither backup substitutes for the other.
+
+```sh
+./scripts/backup-postgres.sh                  # timestamped custom-format dump
+./scripts/verify-postgres-backup.sh <dump>    # restore it and check it matches
+./scripts/backup-cell.sh /Volumes/<disk>/…    # the cell, verified the same way
+```
+
+Neither script stops at copying: each restores what it wrote and checks it came
+back intact, because an untested backup is only a hope.
+`scripts/scheduled-backup.sh` is the unattended wrapper — it prunes, logs, and
+verifies each dump — installed as a daily launchd agent by
+`scripts/com.hemsidor24.backup.plist`.
+
+The details, including what must be true before production:
+[`docs/postgres-backup.md`](docs/postgres-backup.md) and
+[`docs/sijill-cell-backup.md`](docs/sijill-cell-backup.md).
 
 ## Phase status
 

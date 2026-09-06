@@ -5,13 +5,44 @@ Guidance for Claude Code when working in this repository.
 ## What this repo is
 
 A single-page marketing site for **Hemsidor24** — fixed-price one-page websites for
-small Swedish businesses (Start 2 490 kr / Pro 4 490 kr). Bilingual sv/en, with an
-order form. Contact address in the copy: `hej@hemsidor24.se`.
+small Swedish businesses (Start 2 490 kr / Pro 4 490 kr), with an order form and
+the back office behind it. Contact address in the copy: `hej@hemsidor24.se`.
+**Swedish only.** The original design export was bilingual sv/en; the rebuild
+deliberately is not.
 
-The site is being rebuilt as a Rust workspace (`crates/hemsidor24-*`), one
-reviewable phase at a time. See README.md for the crate layout and phase status.
-Build with `cargo build --workspace`; every phase must pass
+It was rebuilt from a single static page into a Rust workspace
+(`crates/hemsidor24-*`), one reviewable phase at a time. All five phases are
+done — see README.md for the crate layout and the workflow the back office
+runs. Build with `cargo build --workspace`; everything must pass
 `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
+
+## Before you run anything
+
+**Tests need their own database.** `TEST_DATABASE_URL` must not name the same
+database as `DATABASE_URL`. The suite writes and truncates, so it panics rather
+than run if they match — that guard exists because the tests spent a while
+writing into development data. Use `hemsidor24_test`.
+
+**To see the product, use the Docker demo**, not a hand-assembled local run:
+
+```sh
+docker compose up --build     # public site :8080, back office :8081/admin/
+docker compose down -v        # reset to an empty demo database
+```
+
+It is isolated from every local database, the Sijill cell and the backups, and
+it runs the default build with no SMTP, so each outgoing message is printed in
+full in `docker compose logs -f hemsidor24-app`.
+
+**Verify browser behaviour in a browser.** Posting to a route with `curl` proves
+the route works and nothing about the page: that is exactly how a script that
+cancelled the order form's submit survived, with the suite green, until someone
+clicked the button by hand.
+
+**The `handover` feature is off by default and needs a real Sijill cell.** With
+it compiled in, the back office refuses to start unless `HANDOVER_CELL_DIR`
+opens; creating a cell takes a deliberate `HANDOVER_CELL_INIT=1`. Do not point
+it at the studio's cell while experimenting — see `docs/sijill-cell-backup.md`.
 
 `reference/` holds input material only — the original design export. Nothing in
 the build reads from it, at runtime or at build time.
